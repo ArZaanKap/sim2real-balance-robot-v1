@@ -1,0 +1,34 @@
+Balancing 2-Wheel Robot — Reference Links
+==========================================
+
+BNO08X IMU (GY-BNO08X breakout; BNO080/BNO085 family)
+- Official CEVA datasheet: https://www.ceva-ip.com/wp-content/uploads/BNO080_085-Datasheet.pdf
+- Official CEVA product page: https://www.ceva-ip.com/product/bno-9-axis-imu/
+- Official CEVA SH-2 C driver: https://github.com/ceva-dsp/sh2
+- Local ESP32 SPI smoke test: imu_test/README.md
+- SPI wiring for this ESP32-WROOM project:
+    VCC=3.3V, GND=GND,
+    SCL/SCK=GPIO18, SDA/MISO=GPIO19, AD0/MOSI=GPIO23,
+    CS=GPIO17, INT=GPIO21, RST=GPIO22,
+    PS1=3.3V and PS0/WAKE=GPIO16; leave BOOT untouched.
+- SPI startup: drive GPIO16 (PS0/WAKE) HIGH, then pulse RST LOW and
+    release it HIGH. PS1 and PS0 must both be HIGH when reset is released.
+- SPI settings: mode 3 (CPOL=1, CPHA=1), maximum clock 3 MHz.
+- Interface selection (sampled at reset):
+    PS1=0 PS0=0: I2C; PS1=0 PS0=1: UART-RVC;
+    PS1=1 PS0=0: UART; PS1=1 PS0=1: SPI.
+
+Encoder reading (ESP32 PCNT) — from Espressif (the MCU maker)
+- PCNT docs:        https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/pcnt.html
+- Rotary example:   esp-idf/examples/peripherals/pcnt/rotary_encoder  (in the ESP-IDF repo)
+
+Motor PWM (ESP32 LEDC) — from Espressif
+- LEDC docs:        https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/ledc.html
+- LEDC example:     esp-idf/examples/peripherals/ledc  (in the ESP-IDF repo)
+
+Motor direction logic (DRV8871 H-bridge truth table) — from Texas Instruments (the driver-chip maker)
+- DRV8871 datasheet: https://www.ti.com/lit/ds/symlink/drv8871.pdf
+
+Note: the GA25-370 motor vendor releases specs only, no code. Code sources are:
+peripheral -> Espressif (ESP-IDF), driver control logic -> TI datasheet,
+sensor and sensor-fusion protocol -> CEVA's official BNO08X documentation.
