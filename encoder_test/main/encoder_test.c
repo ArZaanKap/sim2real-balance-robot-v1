@@ -53,7 +53,7 @@ static const char *TAG = "encoder_test";
 // CALIBRATE (do this first): flash, open the monitor, rotate the OUTPUT shaft EXACTLY one full turn
 // by hand, read the "pos" value. That number is your COUNTS_PER_REV. RPM/rad-s below are only as
 // correct as this constant.
-#define COUNTS_PER_REV   2060.0f
+#define COUNTS_PER_REV   1976.0f   // MEASURED 2026-08-31 (13 poles x4 x 38:1 gearbox); was a 2060 guess
 
 // --- Sampling rate for the velocity print -------------------------------------------------------
 #define SAMPLE_MS        20        // 50 Hz — the rate the real velocity loop will run at

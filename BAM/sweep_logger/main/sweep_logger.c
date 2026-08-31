@@ -59,11 +59,13 @@ static const char *TAG = "bam_sweep";
 #define GLITCH_NS        1000
 
 // --- Scaling / logging --------------------------------------------------------------------------
-// CALIBRATE this exactly like encoder_test.c did (one hand-turn of the output shaft = COUNTS_PER_REV).
-#define COUNTS_PER_REV   2060.0f
+// MEASURED 2026-08-31: 3 hand-turn trials (15/14/10 revs) all gave ~1976 -> 13 hall poles
+// x4 quadrature x 38:1 gearbox = 1976 (and 130RPM x 38 ~= 4940 RPM base motor, checks out).
+#define COUNTS_PER_REV   1976.0f
 // V_BUS is what "duty 255" actually applies across the motor. MEASURE your pack under load and set
 // it here — BAM works in volts, so voltage = (duty/255) * V_BUS. Duty alone is only as good as this.
-#define V_BUS_VOLTS      12.0f
+// MEASURED 2026-08-31: bench supply set 12.0V, read 11.97V at VM->GND under load (rock-steady rail).
+#define V_BUS_VOLTS      11.97f
 #define SAMPLE_MS        10         // 100 Hz logging — fast enough to catch spin-up + spin-down curves
 
 // Position accumulator (written from the PCNT watch-point ISR) — see encoder_test.c for the why.

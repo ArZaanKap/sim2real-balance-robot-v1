@@ -50,19 +50,53 @@ CSV columns: `BAM, t_ms, phase, duty(-255..255), pos_counts, vel_rad_s`.
 
 Safety: open-loop only (no runaway possible), bare shaft, bring 12 V up **after** flashing.
 
-## Phase 2 — fit (PC, not started)
+## Phase 2 — fit (PC, tooling in `fit/`, self-test passing)
 
-Install BAM, convert `run.csv` to its expected trajectory format, fit with CMA-ES. Start with model
-**M3** (Coulomb + viscous), escalate to **M5/M6** (adds back-EMF + Stribeck) only if the velocity
-residuals are bad. We have **no current sensor** (DRV8871), so pin the electrical params by hand
-(R from stall current, Ke from no-load speed) and let BAM fit the friction terms — see the
-`bam-ga25-identification-plan` memory. Fit per-motor or fit one and randomize the spread.
+> **Why not `python -m bam.fit`?** BAM's stock fitter is built for a smart *servo on a
+> pendulum*: it replays a **position-goal** trajectory through the servo's P-controller
+> (`simulate_control=True`) and scores **position error** against a gravity load
+> (`mass·g·length·sin q`). Our data is **open-loop voltage on a free-spinning shaft** — no
+> goal, no gravity load, and position drifts unboundedly so position-matching is the wrong
+> objective. So we keep BAM's real friction math + MuJoCo/Warp export and drive its own
+> `Simulator` with `simulate_control=False` (which replays our recorded **voltage** straight
+> into `τ = kt·V/R − kt²·ω/R`), matching **velocity** instead. Two small swaps make this work,
+> both in `fit/freeshaft.py`:
+> - `FreeShaft` testbench — no gravity bias, inertia lives in the motor `armature`.
+> - `GA25Actuator` — BAM's `VoltageControlledActuator` (already our exact plant) + an `armature`
+>   inertia param, exactly like `MXActuator`. The firmware P-controller is never called.
 
-## Phase 3 — into MuJoCo Warp (not started)
+Pipeline:
+```bash
+cd fit
+# 1) convert the capture to BAM's JSON log format (three logs, one per sweep):
+python csv_to_bam.py ../run.csv logs/ --counts-per-rev 2060 --vin 12.0
+# 2) fit friction, pinning the electrical params by hand (Plan A — no current sensor):
+python fit_freeshaft.py --logs logs/ --model m3 --kt <no-load> --R <stall>   # -> params.json
+# prove the fitter with no hardware at all:
+python fit_freeshaft.py --selftest
+```
+Pin the electrical params by hand (**R** from stall current at a known V, **kt≈Ke** from no-load
+speed); the friction terms are fitted. Start at **M3**; escalate to **M5/M6** (Stribeck) only if
+velocity residuals stay bad. Fit per-motor or fit one and randomize the spread.
 
-Use BAM's MuJoCo/Warp API to install the fitted model as the wheel actuator, then wrap ±20–30%
-domain randomization around the fitted params. The MJCF itself is hand-written from Fusion mass
-properties — see the `cad-to-mujoco` memory.
+Needs `bam`, `numpy`, `scipy` (no optuna/wandb/mujoco for the fit itself). See the
+`bam-ga25-identification-plan` memory. **Model numbers (verified against the repo):** M1=Coulomb,
+M2=Stribeck, M3=load-dependent; `friction_base` (static) and `friction_viscous` (viscous) are base
+terms present in *every* model — so our two priority terms are always fitted.
+
+**Known limitation (from the self-test):** free-shaft data with **no external load** identifies
+static + viscous friction well (~5%), but M3's **load-dependence** term (`load_friction_base`) is
+weakly constrained — it multiplies `|motor_torque|` here, which correlates with the base terms. For
+balancing that is fine (static + viscous are what matter); add a known load if you ever need the
+load term pinned.
+
+## Phase 3 — into MuJoCo Warp (not started; unblocked by Phase 2)
+
+The fitted object is a real BAM `Model`, so use BAM's export directly:
+`bam.to_mujoco.voltage_controlled_to_mujoco(actuator)` for MuJoCo CPU, or `bam/mjlab.py`
+(`import mujoco_warp`) for the Warp training path. Install the fitted model as the wheel actuator,
+then wrap ±20–30% domain randomization around the fitted params. The MJCF itself is hand-written
+from Fusion mass properties — see the `cad-to-mujoco` memory.
 
 ## For a balancer, the two params that matter most
 

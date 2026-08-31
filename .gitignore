@@ -11,6 +11,16 @@ sdkconfig.old
 managed_components/
 dependencies.lock
 
+# Python (BAM fit tooling)
+__pycache__/
+*.pyc
+# Transient fit scratch — regenerable from the committed per-motor CSVs.
+# (The real capture + result ARE tracked: BAM/fit/ga25-370_motor*_run.csv + _params.json)
+BAM/fit/logs/
+BAM/fit/run.csv
+BAM/fit/run2.csv
+BAM/fit/params*.json
+
 # Editor / OS cruft
 .vscode/
 .DS_Store
