@@ -69,15 +69,18 @@ Pipeline:
 ```bash
 cd fit
 # 1) convert the capture to BAM's JSON log format (three logs, one per sweep):
-python csv_to_bam.py ../run.csv logs/ --counts-per-rev 2060 --vin 12.0
+python csv_to_bam.py ../run.csv logs/ --counts-per-rev 1976 --vin 11.97
 # 2) fit friction, pinning the electrical params by hand (Plan A — no current sensor):
-python fit_freeshaft.py --logs logs/ --model m3 --kt <no-load> --R <stall>   # -> params.json
+python fit_freeshaft.py --logs logs/ --model m1 --kt 0.24 --R 6.65   # -> params.json
 # prove the fitter with no hardware at all:
 python fit_freeshaft.py --selftest
 ```
-Pin the electrical params by hand (**R** from stall current at a known V, **kt≈Ke** from no-load
-speed); the friction terms are fitted. Start at **M3**; escalate to **M5/M6** (Stribeck) only if
-velocity residuals stay bad. Fit per-motor or fit one and randomize the spread.
+Pin the electrical params by hand from the datasheet **STALL** point (**R** = V_stall / I_stall,
+**kt≈Ke** = stall_torque / I_stall — NOT the no-load speed, which understates both); the friction
+terms are fitted. Start at **M1** (Coulomb + viscous) — for free-shaft/balancing that's the right
+default, since the self-test showed M3's load term is unidentifiable without an external load.
+Escalate to **M2** or **M5/M6** (Stribeck) only if velocity residuals stay bad. Fit per-motor or
+fit one and randomize the spread.
 
 Needs `bam`, `numpy`, `scipy` (no optuna/wandb/mujoco for the fit itself). See the
 `bam-ga25-identification-plan` memory. **Model numbers (verified against the repo):** M1=Coulomb,

@@ -15,8 +15,8 @@
 #
 # USAGE
 #   python fit_freeshaft.py --selftest                 # no hardware: prove the fitter
-#   python fit_freeshaft.py --logs logs/ --model m3    # fit real captured data
-#   python fit_freeshaft.py --logs logs/ --model m3 --kt 0.021 --R 4.2  # pin electrical
+#   python fit_freeshaft.py --logs logs/ --model m1    # fit real captured data
+#   python fit_freeshaft.py --logs logs/ --model m1 --kt 0.24 --R 6.65  # pin electrical (Motor #1)
 #
 # Depends only on: bam, numpy, scipy  (no optuna/wandb/mujoco needed for the fit).
 
@@ -200,7 +200,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--logs", type=str, help="dir of processed BAM json logs")
-    ap.add_argument("--model", type=str, default="m3", help="m1..m6 (default m3)")
+    ap.add_argument("--model", type=str, default="m1",
+                    help="m1..m6 (default m1 = Coulomb+viscous; right for free-shaft/balancing. "
+                         "m3's load term is unidentifiable without an external load — see README)")
     ap.add_argument("--vin", type=float, default=12.0)
     ap.add_argument("--kt", type=float, default=None, help="pin kt [Nm/A] (Plan A)")
     ap.add_argument("--R", type=float, default=None, help="pin R [Ohm] (Plan A)")

@@ -21,7 +21,7 @@
 #   spindown.json   (phases "spinup" + "coast")
 #   deadband.json   (phase "deadband")
 #
-# USAGE:  python csv_to_bam.py run.csv logs/ --counts-per-rev 2060 --vin 12.0
+# USAGE:  python csv_to_bam.py run.csv logs/ --counts-per-rev 1976 --vin 11.97
 
 import argparse
 import json
@@ -124,7 +124,7 @@ def main():
         print(f"  wrote {out}: {len(entries)} samples")
 
     print(f"dt = {dt*1000:.1f} ms  |  next: python fit_freeshaft.py --logs {args.outdir} "
-          f"--model m3 --kt <measured> --R <measured>")
+          f"--model m1 --kt 0.24 --R 6.65")
 
 
 if __name__ == "__main__":

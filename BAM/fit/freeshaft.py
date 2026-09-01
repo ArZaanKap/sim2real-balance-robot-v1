@@ -59,10 +59,12 @@ class GA25Actuator(VoltageControlledActuator):
     call compute_control (we replay recorded voltage, simulate_control=False), so
     their values are irrelevant to the fit.
 
-    Electrical params kt and R are meant to be PINNED by hand (Plan A: R from the
-    stall current at a known voltage, kt from the no-load speed) and only the
-    friction terms fitted — but they are left as Parameters so you can free them
-    if you later add a current sensor.
+    Electrical params kt and R are meant to be PINNED by hand from the datasheet
+    STALL point (Plan A: R = V_stall / I_stall, kt = stall_torque / I_stall) and
+    only the friction terms fitted — NOT from the no-load speed, which understates
+    both (see the bam-ga25-identification-plan memory). Motor #1 came out kt=0.24,
+    R=6.65. They are left as Parameters so you can free them if you add a current
+    sensor.
     """
 
     def __init__(self, testbench_class, vin: float = 12.0):
@@ -76,11 +78,13 @@ class GA25Actuator(VoltageControlledActuator):
 
     def initialize(self):
         # Torque constant [Nm/A] (== back-EMF constant [V/(rad/s)]).
-        # Pin from no-load speed: kt ~= V_noload / omega_noload (see README Plan A).
-        self.model.kt = Parameter(0.02, 0.0, 1.0)
+        # Pin from datasheet STALL: kt = stall_torque / stall_current (NOT no-load
+        # speed — that understates it). Motor #1: 0.24. (seed value only; pinned in
+        # the fit via --kt.)
+        self.model.kt = Parameter(0.24, 0.0, 1.0)
 
-        # Terminal resistance [Ohm]. Pin from stall: R = V_stall / I_stall.
-        self.model.R = Parameter(3.0, 0.05, 50.0)
+        # Terminal resistance [Ohm]. Pin from stall: R = V_stall / I_stall. Motor #1: 6.65.
+        self.model.R = Parameter(6.65, 0.05, 50.0)
 
         # Motor+gearbox apparent inertia reflected at the output shaft [kg m^2].
         # Fittable from the spin-up transient; small for a GA25 (wheel-on inflates it).
