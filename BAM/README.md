@@ -75,6 +75,20 @@ python fit_freeshaft.py --logs logs/ --model m1 --kt 0.24 --R 6.65   # -> params
 # prove the fitter with no hardware at all:
 python fit_freeshaft.py --selftest
 ```
+
+**Look at the fit (needs `matplotlib`):**
+```bash
+# fitted vs measured velocity, one panel per sweep + residuals (no hardware):
+python plot_fit.py --logs logs/ --params ga25-370_motor1_params.json   # --save fit.png if headless
+# watch a sweep live as it runs (velocity + position, rolling window):
+python live_plot.py --port /dev/ttyUSB0
+#   or pipe the same stream you capture with:
+#   stty -F /dev/ttyUSB0 115200 raw && cat /dev/ttyUSB0 | python live_plot.py
+```
+`plot_fit.py` replays the recorded voltage through the fitted model exactly the way the
+fitter scored it, so lines that overlap = a good fit. On Motor #1 the powered plateaus and
+the deadband track tightly, but the **coast-down decel is over-braked** by M1's Coulomb+viscous
+friction (residual spikes at every duty-to-0 transition) — a known M1 limitation, not a bug.
 Pin the electrical params by hand from the datasheet **STALL** point (**R** = V_stall / I_stall,
 **kt≈Ke** = stall_torque / I_stall — NOT the no-load speed, which understates both); the friction
 terms are fitted. Start at **M1** (Coulomb + viscous) — for free-shaft/balancing that's the right

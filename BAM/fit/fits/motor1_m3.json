@@ -1,0 +1,10 @@
+{
+  "kt": 0.24,
+  "R": 6.65,
+  "armature": 0.0006985709226341043,
+  "q_offset": 0.0,
+  "friction_base": 0.2239182652362048,
+  "load_friction_base": 0.016887535195312955,
+  "friction_viscous": 0.005519568478321454,
+  "model": "m3"
+}
