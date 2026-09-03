@@ -1,0 +1,60 @@
+<mujoco model="learn">
+  <option gravity="0 0 -9.81"/>
+
+  <asset>
+    <texture name="grid" type="2d" builtin="checker"
+             rgb1="0.9 0.95 1.0" rgb2="0.25 0.45 0.75"
+             width="512" height="512"/>
+    <material name="grid" texture="grid" texrepeat="12 12" reflectance="0.15"/>
+  </asset>
+
+  <worldbody>
+    <geom name="floor" type="plane" size="2 2 0.1" material="grid"/>
+
+    <light pos="0 0 3" dir="0 0 -1"/>
+
+    <body name="falling_box" pos="0 0 1">
+      <freejoint/>
+      <geom type="box" size="0.1 0.1 0.1" rgba="0.8 0.2 0.2 1" mass="1"/>
+    </body>
+
+    <body name="pendulum" pos="0.5 0 1">
+      <joint name="pivot" type="hinge" axis="0 1 0"/>
+      <geom type="capsule" fromto="0 0 0  0 0 -0.4" size="0.03" rgba="0.2 0.4 0.8 1"/>
+    </body>
+  </worldbody>
+
+  <!-- TRY THESE, reload after each (this is how you learn the syntax).
+       Press Backspace in the viewer to reset; Space to pause/play.
+
+       BASICS
+       1. change the red box mass="1" -> mass="50". Heavier = faster fall? (no — Galileo)
+       2. change the box pos="0 0 1" -> pos="0 0 3". Higher drop, bigger bounce.
+       3. change pendulum axis="0 1 0" -> axis="1 0 0". It swings on a different axis.
+       4. delete the <freejoint/> line. The box now hangs frozen in mid-air
+          (no joint = welded to the world). This is the #1 beginner surprise.
+       5. add a second <geom> inside falling_box. One body, two shapes.
+
+       MAKE THINGS MOVE
+       6. make the pendulum actually swing: change its fromto to
+          "0 0 0  0.3 0 -0.3" so it STARTS off-vertical, then watch gravity swing it.
+       7. change <option gravity="0 0 -9.81"/> to "0 0 -1.62" (moon). Slow-mo fall.
+          Then try "0 0 0" — the box floats, the pendulum never moves.
+
+       SHAPES & LOOKS
+       8. change the box geom type="box" to type="sphere" and delete two of the three
+          size numbers (sphere needs only one). Now it lands and rolls.
+       9. change the capsule size="0.03" -> size="0.08". A fat rod instead of a thin one.
+      10. change the box rgba="0.8 0.2 0.2 1" -> "0.8 0.2 0.2 0.3". The 4th number is
+          alpha — now it's see-through.
+
+       THE FLOOR (asset practice)
+      11. change texrepeat="12 12" -> "40 40". Many more, smaller squares.
+      12. change rgb1/rgb2 to "1 1 1" and "0.6 0.6 0.6" for a grey/white Isaac-Gym floor.
+      13. rename <material name="grid"> to name="floortex" but DON'T update the geom's
+          material="grid". See the "material not found" error — names must match exactly.
+
+       BUILD SOMETHING
+      14. copy the whole pendulum <body> block, paste it, and change name + pos="1.5 0 1".
+          Two pendulums. (This is how you'll add your 2nd wheel later.) -->
+</mujoco>

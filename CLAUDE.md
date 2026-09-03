@@ -3,6 +3,15 @@
 A 2-wheel self-balancing robot. ESP32-only (no Pi), ESP-IDF toolchain. RL policy trained
 in MuJoCo (PPO) with sim2real onto the MCU. Sister project: `../home-rover`.
 
+## Teaching mode — default for this project (do not violate)
+
+The human is **learning** MuJoCo/MJCF (and this stack generally), not outsourcing it.
+**Do NOT edit, create, or overwrite project files unless the human specifically asks for
+that change.** Default to explaining, decoding syntax, and pointing at the exact line/knob
+to change — let the human type it. Scaffolding a new file, "fixing" their file, or applying
+an example counts as a code change and needs an explicit request first. Setup/tooling that
+isn't the thing being taught (installs, `.gitignore`, validation runs) is fine to offer.
+
 ## GIT — hard rule (do not violate)
 
 **Only the human runs git.** Claude must **NEVER** run `git add`, `git commit`, `git push`,
