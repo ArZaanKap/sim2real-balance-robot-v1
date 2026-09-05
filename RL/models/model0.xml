@@ -14,18 +14,55 @@
 
     <light pos="0 0 3" dir="0 0 -1"/>
 
-    <body name="robot" pos="0 0 1">
+    <body name="robot" pos="0 0 0.610"> <!-- where robot origin starts (0.605 is wheels touching ground perfectly)-->
       <!-- if no freejoint, then it stays frozen where spawned-->   <!-- forward x axis-->
       <freejoint/>
-      <geom type="box" size="0.046 0.083 0.009" rgba="0.5 0.5 0.5 1" pos="0 0 0" mass="160"/> <!-- base -->
-      <geom type="box" size="0.013 0.015 0.0015" rgba="0.5 0.5 0.5 1" pos="0 0.068 -0.0105" mass="5"/> <!-- bracket right top bit -->
-      <geom type="box" size="0.013 0.015 0.0015" rgba="0.5 0.5 0.5 1" pos="0 -0.068 -0.0105" mass="5"/> <!-- bracket left top bit -->
-      <geom type="box" size="0.013 0.0015 0.015" rgba="0.5 0.5 0.5 1" pos="0 0.0 0" mass="6"/> <!-- bracket right motor bit -->
-      
+      <!-- base -->
+      <geom type="box" size="0.046 0.083 0.009" rgba="0.5 0.5 0.5 1" pos="0 0 0" mass="0.160"/> 
+
+      <!-- brackets -->
+      <geom type="box" size="0.013 0.015 0.0015" rgba="0.5 0.5 0.5 1" pos="0 0.068 -0.0105" mass="0.005"/> <!-- bracket left top bit -->
+      <geom type="box" size="0.013 0.015 0.0015" rgba="0.5 0.5 0.5 1" pos="0 -0.068 -0.0105" mass="0.005"/> <!-- bracket right top bit -->
+      <geom type="box" size="0.013 0.0015 0.0165" rgba="0.5 0.5 0.5 1" pos="0 0.0845 -0.0255" mass="0.006"/> <!-- bracket left motor bit -->
+      <geom type="box" size="0.013 0.0015 0.0165" rgba="0.5 0.5 0.5 1" pos="0 -0.0845 -0.0255" mass="0.006"/> <!-- bracket right motor bit -->
+
+      <!-- motor -->  <!-- (radius, half len)-->
+      <geom type="cylinder" size="0.0125 0.0250" zaxis="0 1 0" rgba="0.5 0.5 0.5 1" pos="0 0.058 -0.0255" mass="0.087"/> <!-- motor body left-->
+      <geom type="cylinder" size="0.0125 0.0250" zaxis="0 1 0" rgba="0.5 0.5 0.5 1" pos="0 -0.058 -0.0255" mass="0.087"/> <!-- motor body right-->
+      <geom type="cylinder" size="0.0015 0.0025" zaxis="0 1 0" rgba="0.5 0.5 0.5 1" pos="0 0.0875 -0.0255" mass="0.010"/> <!-- motor rod left-->
+      <geom type="cylinder" size="0.0015 0.0025" zaxis="0 1 0" rgba="0.5 0.5 0.5 1" pos="0 -0.0875 -0.0255" mass="0.010"/> <!-- motor rod right-->
+
+      <!-- wheel -->
+      <geom type="cylinder" size="0.035 0.015" zaxis="0 1 0" rgba="0.5 0.5 0.5 1" pos="0 0.1045 -0.0255" mass="0.049"/> <!-- wheel left-->
+      <geom type="cylinder" size="0.035 0.015" zaxis="0 1 0" rgba="0.5 0.5 0.5 1" pos="0 -0.1045 -0.0255" mass="0.049"/> <!-- wheel right-->
+
+      <!-- neck -->
+      <geom type="box" size="0.009 0.01625 0.290" rgba="0.5 0.5 0.5 1" pos="0 0 0.290" mass="0.214"/> 
+
+      <!-- battery block-->
+
+
+      <!-- electronics block -->
+
+
     </body>
 
-    
+
+    <!-- wheels not rigid-->
+    <body name="wheel left" pos="0 0.1045 -0.0255">
+      <joint name="wheel_left_joint" type="hinge" axis="0 1 0"/> <!-- rotate about y -->
+      <geom type="cylinder" size="0.035 0.015" zaxis="0 1 0" rgba="0.5 0.5 0.5 1" pos="0 0 0" mass="0.049"/> <!-- wheel left-->
+    </body>
+
+    <body name="wheel right" pos="0 -0.1045 -0.0255">
+      <joint name="wheel_right_joint" type="hinge" axis="0 1 0"/> <!-- rotate about y -->
+      <geom type="cylinder" size="0.035 0.015" zaxis="0 1 0" rgba="0.5 0.5 0.5 1" pos="0 0 0" mass="0.049"/> <!-- wheel left-->
+    </body>
+
+
+
+
   </worldbody>
 
 
-<mujoco/>
+</mujoco>
