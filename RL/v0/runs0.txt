@@ -1,0 +1,2 @@
+1. v0 - 10s episodes, default params PPO (resilient to increase pitch start in play (0.1 -> 0.3rad) - prob learned during training)
+2. 20s eps, fall_angle 0.4 -> 0.6, pitch0 0.1 -> 0.3, pitch_rate0 0 -> 0.1rad/s, new reward (penalise vel to stop drift after stabilising)
