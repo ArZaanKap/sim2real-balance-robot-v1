@@ -56,6 +56,9 @@
         <geom type="cylinder" size="0.035 0.015" zaxis="0 1 0" rgba="0.5 0.5 0.5 1" pos="0 0 0" mass="0.049" friction="1.0 0.005 0.0001"/> <!-- wheel left  (friction="slide torsion roll")-->
       </body>
 
+      <!-- site for imu sensor to attach to -->
+      <site name="imu" pos="0.02 0.03 0.019" size="0.005" rgba="1 0 0.5 1"/>
+
     </body>
   </worldbody>
 
@@ -64,5 +67,11 @@
     <motor name="wheel_right_motor" joint="wheel_right_joint" gear="1" ctrlrange="-0.43 0.43"/>
   </actuator>
 
+  <sensor>
+    <framequat name="imu_quat" objtype="site" objname="imu"/>
+    <gyro name="imu_gyro" site="imu"/>
+    <jointvel name="wheel_left_vel" joint="wheel_left_joint"/>
+    <jointvel name="wheel_right_vel" joint="wheel_right_joint"/>
+  </sensor>
 
 </mujoco>
