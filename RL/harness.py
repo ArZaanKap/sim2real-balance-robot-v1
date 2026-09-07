@@ -7,7 +7,11 @@ model = mujoco.MjModel.from_xml_path("models/model0.xml")
 data = mujoco.MjData(model) # whats in data?
 
 # add small angular vel around y axis
-data.qvel[4] = 0.05 # qvel = [vx, vy, vz, wx, wy, wz]
+#data.qvel[4] = 0.05 # qvel = [vx, vy, vz, wx, wy, wz]
+
+# apply torques
+data.ctrl[0] = 0.25  # left motor
+data.ctrl[1] = 0.25   # right motor
 
 step = 0
 
