@@ -21,4 +21,4 @@ model.learn(total_timesteps=300_000)
 
 save_dir = "trained_policies"
 os.makedirs(save_dir, exist_ok=True)
-model.save(os.path.join(save_dir,"ppo_balance6"))
+model.save(os.path.join(save_dir,"ppo_balance8"))

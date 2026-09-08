@@ -23,14 +23,17 @@ class BalanceEnv(gym.Env):
         self.step_count = 0
 
         self.fall_angle = 0.6 # rad 
-        self.start_pos = None
+
+        self.prev_action = None
+        
 
     def reset(self, *, seed=None, options=None): # * means keyword only
         super().reset(seed=seed)
 
         mujoco.mj_resetData(self.model, self.data)
-        self.start_pos = self.data.qpos[0:3].copy() # start (x,y,z)
 
+        self.prev_action = None # for action rate reward
+        
         # randomise starting pitch
         pitch0 = self.np_random.uniform(-0.3, 0.3) # rad (~16deg)
 
@@ -84,9 +87,15 @@ class BalanceEnv(gym.Env):
         #drift_pen = -0.5 * np.sum(self.data.qvel[0:3]**2) # penalise linear vel of robot base in x y z (z=0 anyway) to attack drift
         # see if effort pen enough to make it not run away?
 
-        effort_pen = -0.002 * np.sum(np.square(action))  # neg reward
+        action_pen = -0.0005 * np.sum(np.square(action))  # neg reward
+        
+        action_rate_pen = 0.0 # prevent crash for 1st skip
+        if self.prev_action is not None:
+            action_rate_pen = -0.01 * np.sum(np.square(action - self.prev_action))
+        
+        self.prev_action = action
 
-        reward = upright + effort_pen #+ drift_pen
+        reward = upright + action_pen + action_rate_pen #+ drift_pen
 
         # --- episode end --- #
         terminated = bool(abs(pitch) > self.fall_angle) # fell over
