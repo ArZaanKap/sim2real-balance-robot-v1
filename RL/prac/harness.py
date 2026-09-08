@@ -3,7 +3,7 @@ import numpy as np
 import mujoco
 import mujoco.viewer
 
-model = mujoco.MjModel.from_xml_path("models/model0.xml")
+model = mujoco.MjModel.from_xml_path("..models/model0.xml")
 data = mujoco.MjData(model) # whats in data?
 
 # add small angular vel around y axis

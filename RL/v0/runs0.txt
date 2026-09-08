@@ -1,2 +1,7 @@
-1. v0 - 10s episodes, default params PPO (resilient to increase pitch start in play (0.1 -> 0.3rad) - prob learned during training)
-2. 20s eps, fall_angle 0.4 -> 0.6, pitch0 0.1 -> 0.3, pitch_rate0 0 -> 0.1rad/s, new reward (penalise vel to stop drift after stabilising)
+0. 10s episodes, default params PPO (resilient to increase pitch start in play (0.1 -> 0.3rad) - prob learned during training)
+1. 20s eps, fall_angle 0.4 -> 0.6, pitch0 0.1 -> 0.3, pitch_rate0 0 -> 0.1rad/s, new reward (penalise robot base linear vel to stop drift after stabilising)
+2. same a 1, but removed the new drift_pen reward (lin vel only based)
+3. same as 1, but drift pen k=-0.1 -> -0.5
+4. considered runs 1-3, reducing rewards for simplicity (removing drift_pen) - same as run2, effort pen -0.001 -> -0.01 FAILED
+5. same as 2 & 4 but effort_pen -0.001 -> -0.0002 TOO JITTERY
+6. same as 2, 4, 5, effort_pen -0.001 -> -0.002

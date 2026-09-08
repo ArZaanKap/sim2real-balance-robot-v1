@@ -40,7 +40,7 @@ class BalanceEnv(gym.Env):
         # qpos = [x, y, z, qw, qx, qy, qz] 3 to 6 is rotation quaternion
         self.data.qpos[3:7] = [np.cos(pitch0/2), 0.0, np.sin(pitch0/2), 0.0] # standard quarternion rotation formula TODO revise
         
-        # qvel = [vx, vy, vz, wx, wy, wz]
+        # qvel = [vx, vy, vz, wx, wy, wz, wheelL_w, wheelR_w]
         self.data.qvel[4] = pitch_rate0
 
         mujoco.mj_forward(self.model, self.data) # recompute sensor data for 1st obs
@@ -81,12 +81,12 @@ class BalanceEnv(gym.Env):
         
         # try vel vs pos?
         #drift_pen = -0.1 * np.sum((self.data.qpos[0:3] - self.start_pos)**2)
-        drift_pen = -0.1 * np.sum(self.data.qvel**2) # penalise vel in x y z (z=0 anyway) to attack drift
+        #drift_pen = -0.5 * np.sum(self.data.qvel[0:3]**2) # penalise linear vel of robot base in x y z (z=0 anyway) to attack drift
         # see if effort pen enough to make it not run away?
 
-        effort_pen = -0.001 * np.sum(np.square(action))  # neg reward
+        effort_pen = -0.002 * np.sum(np.square(action))  # neg reward
 
-        reward = upright + effort_pen
+        reward = upright + effort_pen #+ drift_pen
 
         # --- episode end --- #
         terminated = bool(abs(pitch) > self.fall_angle) # fell over
