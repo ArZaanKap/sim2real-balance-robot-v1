@@ -6,4 +6,11 @@
 5. same as 2 & 4 but effort_pen -0.001 -> -0.0002 TOO JITTERY
 6. same as 2, 4, 5, effort_pen -0.001 -> -0.002 FAILED TOO HIGH
 7. same as 2, 4, 5, effortn_pen -0.001 -> -0.0005
-8. same as 2 and 7 (effort_pen=-0.0005), but action rate penalty added
+8. same as 2 and 7 (effort_pen=-0.0005), but action rate penalty added - FAILED, stable then unstable somehow
+9. 8 but action_pen removed (OK - highest reward but non consistent)
+10. 9 but action_pen_rate -0.01 -> -0.1 FAILED - looping in circles forever
+11. removed all rewards except upright 
+
+
+12. run2 trained longer 300k -> 400k - NOT GREAT even with high reward earned
+13. run

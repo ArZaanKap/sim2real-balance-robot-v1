@@ -87,15 +87,15 @@ class BalanceEnv(gym.Env):
         #drift_pen = -0.5 * np.sum(self.data.qvel[0:3]**2) # penalise linear vel of robot base in x y z (z=0 anyway) to attack drift
         # see if effort pen enough to make it not run away?
 
-        action_pen = -0.0005 * np.sum(np.square(action))  # neg reward
+        action_pen = -0.001 * np.sum(np.square(action))  # neg reward
         
-        action_rate_pen = 0.0 # prevent crash for 1st skip
-        if self.prev_action is not None:
-            action_rate_pen = -0.01 * np.sum(np.square(action - self.prev_action))
+        #action_rate_pen = 0.0 # prevent crash for 1st skip
+        #if self.prev_action is not None:
+            #action_rate_pen = -0.1 * np.sum(np.square(action - self.prev_action))
         
-        self.prev_action = action
+        #self.prev_action = action.copy() # verify this is needed?
 
-        reward = upright + action_pen + action_rate_pen #+ drift_pen
+        reward = upright + action_pen #+ action_rate_pen #+ drift_pen  action_pen
 
         # --- episode end --- #
         terminated = bool(abs(pitch) > self.fall_angle) # fell over

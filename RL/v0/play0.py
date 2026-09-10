@@ -2,7 +2,7 @@ import time, numpy as np, mujoco, mujoco.viewer
 from balance_env0 import BalanceEnv
 from stable_baselines3 import PPO
 
-model = PPO.load("trained_policies/ppo_balance7")
+model = PPO.load("trained_policies/ppo_balance12")
 env = BalanceEnv()
 obs, _ = env.reset()
 
