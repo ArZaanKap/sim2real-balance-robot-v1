@@ -47,7 +47,7 @@ class BalanceEnv(gym.Env):
 
         # reset histories
         self.action_hist = np.zeros(self.action_space.shape[0] * self.len_action_hist) # 2 * 3  # or deque?
-        self.obs_hist = np.zeros(self.observation_space * (1+self.len_obs_hist))
+        self.obs_hist = np.zeros(self.core_obs_len * self.len_obs_hist)
 
         # init dr mass, dr obs0, dr action/obs latency
 
@@ -84,27 +84,30 @@ class BalanceEnv(gym.Env):
         wl = self.data.sensor("wheel_left_vel").data[0] + np.random.uniform(-0.3, 0.3)  # (angular vel) [0] cos length 1 vector
         wr = self.data.sensor("wheel_right_vel").data[0] + np.random.uniform(-0.3, 0.3)
 
-        return np.array([pitch, pitch_rate, wl, wr, *self.action_hist, *self.obs_hist], dtype=np.float32)
+        return np.array([pitch, pitch_rate, wl, wr], dtype=np.float32) # return core obs (without histories)
 
 
     def step(self, action):
 
-        # update action history here
-        self.action_hist = 
-
         # torque = policy output clip to [-1, 1] * max torque
         self.data.ctrl[:] = np.clip(action, -1.0, 1.0) * self.max_torque # whats data.ctrl look like - 
 
-        # advance physics and obs with action
+        # advance physics with action input and construct new obs
         for i in range(self.physics_substeps):
             mujoco.mj_step(self.model, self.data)
 
+        # update action history here - front is most recent
+        self.action_hist = np.roll(self.action_hist, self.action_space.shape[0])  # queue of prev actions
+        self.action_hist[0:self.action_space.shape[0]] = action
+
         self.step_count += 1
         obs = self._get_obs()
-        pitch, pitch_rate, wl, wr, action_hist, obs_hist = obs
+        pitch, pitch_rate, wl, wr = obs
+        full_obs = np.array([*obs, *self.action_hist, *self.obs_hist])  # full obs to return
 
         # update obs hist here
-        self.obs_hist = 
+        self.obs_hist = np.roll(self.obs_hist, self.core_obs_len)
+        self.obs_hist[0:self.core_obs_len] = np.array([pitch, pitch_rate, wl, wr])
 
         # ---- REWARDS ---- #
         upright = 1.0 - (pitch/self.fall_angle)**2
@@ -122,4 +125,4 @@ class BalanceEnv(gym.Env):
         terminated = bool(abs(pitch) > self.fall_angle)
         truncated = bool(self.step_count >= self.max_steps)
 
-        return obs, float(reward), terminated, truncated, {}
+        return full_obs, float(reward), terminated, truncated, {}
