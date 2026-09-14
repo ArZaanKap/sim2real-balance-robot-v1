@@ -23,12 +23,12 @@ class BalanceEnv(gym.Env):
         # pitch from imu (on board filter), pitch rate (imu gyro raw y), wheel_w: differentiate encoder readings + 1st order filter (in sim read raw vel + DR)
         # [(pitch, pitch_rate, wl_w, wr_w), action_hist, obs_hist] 
         self.observation_space = Box(-np.inf, np.inf, 
-            shape=(self.core_obs_len*(self.len_obs_hist+1) + self.action_space.size[0]*(self.len_action_hist),),
+            shape=(self.core_obs_len*(self.len_obs_hist+1) + self.action_space.shape[0]*(self.len_action_hist),),
             dtype=np.float32)
 
 
-        self.action_hist = np.zeros(self.action_space.shape[0] * self.len_action_hist) # 2 * 3  # or deque?
-        self.obs_hist = np.zeros(self.observation_space * (1+self.len_obs_hist))
+        self.action_hist = np.zeros(self.action_space.shape[0] * self.len_action_hist) # 2 * 3  # store prev N actions
+        self.obs_hist = np.zeros(self.core_obs_len * self.len_obs_hist) # store prev N observations
 
         self.max_torque = 0.43 # Nm - derived
         self.physics_substeps = 5 # 500hz physics vs 100hz control
@@ -40,7 +40,7 @@ class BalanceEnv(gym.Env):
         self.prev_action = None
 
 
-    def reset(self):
+    def reset(self, seed=None, options=None):
         super().reset(seed=seed)
 
         mujoco.mj_resetData(self.model, self.data)
@@ -89,6 +89,9 @@ class BalanceEnv(gym.Env):
 
     def step(self, action):
 
+        # update action history here
+        self.action_hist = 
+
         # torque = policy output clip to [-1, 1] * max torque
         self.data.ctrl[:] = np.clip(action, -1.0, 1.0) * self.max_torque # whats data.ctrl look like - 
 
@@ -98,7 +101,10 @@ class BalanceEnv(gym.Env):
 
         self.step_count += 1
         obs = self._get_obs()
-        pitch, pitch_rate, wl, wr = obs
+        pitch, pitch_rate, wl, wr, action_hist, obs_hist = obs
+
+        # update obs hist here
+        self.obs_hist = 
 
         # ---- REWARDS ---- #
         upright = 1.0 - (pitch/self.fall_angle)**2
