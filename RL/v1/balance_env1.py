@@ -12,6 +12,10 @@ class BalanceEnv(gym.Env):
         self.model = mujoco.MjModel.from_xml_path(model_path)
         self.data = mujoco.MjData(self.model)
 
+        # store model xml data before DR applied
+        self.nominal_body_mass = self.model.body_mass.copy()
+        self.nominal_body_inertia = self.model.body_inertia.copy()
+
         self.len_action_hist = 3
         self.len_obs_hist = 3
 
@@ -49,7 +53,13 @@ class BalanceEnv(gym.Env):
         self.action_hist = np.zeros(self.action_space.shape[0] * self.len_action_hist) # 2 * 3  # or deque?
         self.obs_hist = np.zeros(self.core_obs_len * self.len_obs_hist)
 
-        # init dr mass, dr obs0, dr action/obs latency
+        # mass/inertia DR
+        for i in range(1,self.model.nbody): # skip body 0 (world - has no mass)
+            f = np.random.uniform(0.8,1.2)  # must be same factor for mass & inertia else physically wrong?
+            self.model.body_mass[i] = self.nominal_body_mass * f
+            self.model.body_inertia[i] = self.nominal_body_inertia * f
+
+
 
         # randomise max torque at start of eps
         self.max_torque = np.random.uniform(0.35, 0.45) # right place?
@@ -64,6 +74,7 @@ class BalanceEnv(gym.Env):
         # qvel = [vx, vy, vz, wx, wy, wz, wheelL_w, wheelR_w]
         self.data.qvel[4] = pitch_rate0
 
+        # UPDATE sim with changes above
         mujoco.mj_forward(self.model, self.data)
         self.step_count = 0
 
