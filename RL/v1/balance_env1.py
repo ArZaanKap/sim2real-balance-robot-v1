@@ -67,17 +67,21 @@ class BalanceEnv(gym.Env):
         mujoco.mj_forward(self.model, self.data)
         self.step_count = 0
 
-        return self._get_obs(), {}
-        
-
-    def _get_obs(self):
+        # has to match step()?
+        full_obs = np.array([*self._get_obs(), *self.action_hist, *self.obs_hist])
+        return full_obs, {}
+    
+    # helper to get pitch
+    def get_pitch(self):
         quat = self.data.sensor("imu_quat").data    # rot stored as quarternion - must extract theta
         R = np.zeros(9)
         mujoco.mju_quat2Mat(R, quat)
         R = R.reshape(3,3)
+        return np.arctan2(R[0,2], R[2,2])  # x = atan2(sin(x)/cos(x)) -> 3d y rot matrix
+
+    def _get_obs(self):
         
-        pitch = np.arctan2(R[0,2], R[2,2]) + np.random.uniform(-0.1, 0.1) # x = atan2(sin(x)/cos(x)) -> 3d y rot matrix
-        
+        pitch = self.get_pitch() + np.random.uniform(-0.1, 0.1)
         pitch_rate = self.data.sensor("imu_gyro").data[1] + np.random.uniform(-0.3, 0.3)  # (wx, wy, wz) -> gyros give angular velocity in each axis
         
         # read gt wheel vel with noise (not available on robot - differentiate encoder readings then filter instead)
@@ -102,16 +106,19 @@ class BalanceEnv(gym.Env):
 
         self.step_count += 1
         obs = self._get_obs()
-        pitch, pitch_rate, wl, wr = obs
+        #pitch, pitch_rate, wl, wr = obs
         full_obs = np.array([*obs, *self.action_hist, *self.obs_hist])  # full obs to return
 
         # update obs hist here
         self.obs_hist = np.roll(self.obs_hist, self.core_obs_len)
-        self.obs_hist[0:self.core_obs_len] = np.array([pitch, pitch_rate, wl, wr])
+        self.obs_hist[0:self.core_obs_len] = np.array([*obs]) # expand obs
 
         # ---- REWARDS ---- #
-        upright = 1.0 - (pitch/self.fall_angle)**2
+        # use GT vals from sim - not noisy vals from obs
 
+        gt_pitch = self.get_pitch()
+
+        upright = 1.0 - (gt_pitch/self.fall_angle)**2
         action_pen = -0.001 * np.sum(np.square(action)) # penalise large torques
 
         action_rate_pen = 0.0
@@ -122,7 +129,7 @@ class BalanceEnv(gym.Env):
 
         reward = upright + action_pen + action_rate_pen
 
-        terminated = bool(abs(pitch) > self.fall_angle)
+        terminated = bool(abs(gt_pitch) > self.fall_angle)
         truncated = bool(self.step_count >= self.max_steps)
 
         return full_obs, float(reward), terminated, truncated, {}
