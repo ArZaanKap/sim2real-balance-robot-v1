@@ -1,0 +1,5 @@
+1. 
+2. gamma 0.99 -> 0.995, needs more training
+3. gamma -> 0.997, not as good
+4. run2 trained 400k -> 600k
+5. run4, normalize advantage false

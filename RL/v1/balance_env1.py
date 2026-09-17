@@ -16,6 +16,16 @@ class BalanceEnv(gym.Env):
         # store model xml data before DR applied
         self.nominal_body_mass = self.model.body_mass.copy()
         self.nominal_body_inertia = self.model.body_inertia.copy()
+        self.nominal_gain = self.model.actuator_gainprm.copy()
+        self.nominal_bias = self.model.actuator_biasprm.copy()
+        self.nominal_frictionloss = self.model.dof_frictionloss.copy()
+        self.nominal_geom_friction = self.model.geom_friction.copy()
+        self.nominal_armature = self.model.dof_armature.copy()
+
+        # very hard to understand these...?
+        wheel_bodies = [mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, n) for n in ("wheel_left", "wheel_right")]
+        self.wheel_geom_ids = [g for g in range(self.model.ngeom) if self.model.geom_bodyid[g] in wheel_bodies]
+        self.wheel_dof_ids = [self.model.jnt_dofadr[mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, n)] for n in ("wheel_left_joint", "wheel_right_joint")]
 
         self.len_action_hist = 3
         self.len_obs_hist = 3
@@ -36,9 +46,6 @@ class BalanceEnv(gym.Env):
         self.action_hist = np.zeros(self.num_actions * self.len_action_hist) # 2 * 3  # store prev N actions
         self.obs_hist = np.zeros(self.core_obs_len * self.len_obs_hist) # store prev N observations
 
-        
-
-        self.max_torque = 0.43 # Nm - derived
         self.physics_substeps = 5 # 500hz physics vs 100hz control
         self.step_count = 0
         self.max_steps = 2000
@@ -54,8 +61,8 @@ class BalanceEnv(gym.Env):
         mujoco.mj_resetData(self.model, self.data)
 
         # reset histories
-        self.action_hist = np.zeros(self.num_actions * self.len_action_hist) # 2 * 3  # or deque?
-        self.obs_hist = np.zeros(self.core_obs_len * self.len_obs_hist)
+        self.action_hist = np.zeros(self.num_actions * self.len_action_hist, dtype=np.float32) # 2 * 3  # or deque?
+        self.obs_hist = np.zeros(self.core_obs_len * self.len_obs_hist, dtype=np.float32)
 
         # reset pre action cos new episode starts
         self.prev_action = None
@@ -65,17 +72,31 @@ class BalanceEnv(gym.Env):
             f = self.np_random.uniform(0.8,1.2)  # must be same factor for mass & inertia else physically wrong?
             self.model.body_mass[i] = self.nominal_body_mass[i] * f
             self.model.body_inertia[i] = self.nominal_body_inertia[i] * f
+        
+        # MOTOR ELECTRICAL DR - need explaining math
+        kt_R_f = self.np_random.uniform(0.85, 1.15) # kt/R - scale stall and droop together
+        vbus_f = self.np_random.uniform(0.90, 1.05) # bus voltage scales stall only??
+        self.model.actuator_gainprm[:, 0] = self.nominal_gain[:,0] * kt_R_f * vbus_f
+        self.model.actuator_biasprm[:, 2] = self.nominal_bias[:, 2] * kt_R_f
 
-        # buffers for latency DR (action & obs)
+        # TIRE/FLOOR FRICTION DR
+        mu_f = self.np_random.uniform(0.6, 1.1) # lower mu means more slippery
+        for g in self.wheel_geom_ids:
+            self.model.geom_friction[g, 0] = self.nominal_geom_friction[g,0] * mu_f
+
+        # frictionloss DEADBAND & armature DR
+        for d in self.wheel_dof_ids:
+            self.model.dof_frictionloss[d] = self.nominal_frictionloss[d] * self.np_random.uniform(0.75, 1.25)
+            self.model.dof_armature[d] = self.nominal_armature[d] * self.np_random.uniform(0.9, 1.1) # tight
+
+        # buffers for latency DR (action & obs MAYBE)
         # action_buf stores raw actions
-        self.action_buf = np.zeros(self.num_actions * self.np_random.integers(1,4)) # random action delay in control steps() -> so 0.1 to 0.3s?
+        self.action_buf = np.zeros(self.num_actions * self.np_random.integers(1,4)) # random action delay in control steps() -> so 10ms - 40ms
+        
 
-        # randomise max torque at start of eps
-        self.max_torque = self.np_random.uniform(0.35, 0.45) # right place?
-
-        # INIT STATE DR
+        # INIT STATE DR - should add noise here too? else 1st clean?
         pitch0 = self.np_random.uniform(-0.3, 0.3) # rad
-        pitch_rate0 = self.np_random.uniform(-0.5, 0.5) # rad/s
+        pitch_rate0 = self.np_random.uniform(-0.3, 0.3) # rad/s
 
         # qpos = [x, y, z, qw, qx, qy, qz] 
         self.data.qpos[3:7] = [np.cos(pitch0/2), 0.0, np.sin(pitch0/2), 0.0]  # amend quaternion to apply init rotation offset [3:7]
@@ -89,7 +110,7 @@ class BalanceEnv(gym.Env):
         self.step_count = 0
 
         # has to match step()?
-        full_obs = np.array([*self._get_obs(), *self.action_hist, *self.obs_hist])
+        full_obs = np.array([*self._get_obs(), *self.action_hist, *self.obs_hist], dtype=np.float32)
         return full_obs, {}
     
     # helper to get pitch
@@ -102,12 +123,12 @@ class BalanceEnv(gym.Env):
 
     def _get_obs(self):
         
-        pitch = self.get_pitch() + self.np_random.uniform(-0.1, 0.1)
-        pitch_rate = self.data.sensor("imu_gyro").data[1] + self.np_random.uniform(-0.3, 0.3)  # (wx, wy, wz) -> gyros give angular velocity in each axis
+        pitch = self.get_pitch() + self.np_random.uniform(-0.04, 0.04)
+        pitch_rate = self.data.sensor("imu_gyro").data[1] + self.np_random.uniform(-0.05, 0.05)  # (wx, wy, wz) -> gyros give angular velocity in each axis
         
         # read gt wheel vel with noise (not available on robot - differentiate encoder readings then filter instead)
-        wl = self.data.sensor("wheel_left_vel").data[0] + self.np_random.uniform(-0.3, 0.3)  # (angular vel) [0] cos length 1 vector
-        wr = self.data.sensor("wheel_right_vel").data[0] + self.np_random.uniform(-0.3, 0.3)
+        wl = self.data.sensor("wheel_left_vel").data[0] + self.np_random.uniform(-0.05, 0.05)  # (angular vel) [0] cos length 1 vector
+        wr = self.data.sensor("wheel_right_vel").data[0] + self.np_random.uniform(-0.05, 0.05)
 
         return np.array([pitch, pitch_rate, wl, wr], dtype=np.float32) # return core obs (without histories)
 
@@ -122,8 +143,8 @@ class BalanceEnv(gym.Env):
         self.action_buf[0:self.num_actions] = action
 
         
-        # torque = policy output clip to [-1, 1] * max torque
-        self.data.ctrl[:] = np.clip(delayed_action, -1.0, 1.0) * self.max_torque # whats data.ctrl look like - 
+        # torque = policy output clip to [-1, 1] - ACTUATOR DOES SCALING NOW
+        self.data.ctrl[:] = np.clip(delayed_action, -1.0, 1.0) # pass raw action to actuator model 
 
         # advance physics with action input and construct new obs
         for i in range(self.physics_substeps):
@@ -135,11 +156,11 @@ class BalanceEnv(gym.Env):
 
         self.step_count += 1
         obs = self._get_obs()
-        full_obs = np.array([*obs, *self.action_hist, *self.obs_hist])  # full obs to return
+        full_obs = np.array([*obs, *self.action_hist, *self.obs_hist], dtype=np.float32)  # full obs to return
 
         # update obs hist here
         self.obs_hist = np.roll(self.obs_hist, self.core_obs_len)
-        self.obs_hist[0:self.core_obs_len] = np.array([*obs]) # expand obs
+        self.obs_hist[0:self.core_obs_len] = obs
 
         # ---- REWARDS ---- #
         # use GT vals from sim - not noisy vals from obs
