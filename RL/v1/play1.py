@@ -5,7 +5,7 @@ from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from balance_env1 import BalanceEnv
 
 # ---- pick what to play (one place) ----
-RUN = 10
+RUN = 11
 MODEL_PATH = "../models/model1.xml"
 SAVE_DIR = "trained_policies1"
 USE_BEST = True   # True -> best{RUN}/ checkpoint (save-best); False -> final ppo_balance{RUN}

@@ -9,7 +9,7 @@ import os
 from balance_env1 import BalanceEnv
 
 # ---- change per run (one place) ----
-RUN = 10
+RUN = 11
 MODEL_PATH = "../models/model1.xml"
 SAVE_DIR = "trained_policies1"
 # ------------------------------------
