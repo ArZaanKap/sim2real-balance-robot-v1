@@ -6,3 +6,7 @@
 6. gamma 0.995, 600k, action pen disabled (dont want to penalise large actions) - OK, BUT LEARNED TO BE JERKY
 7. run6 but action_rate_pen k=-0.005 -> k=-0.01
 8. run6 but action_rate_pen k=-0.005 -> k=-0.002
+
+DRASTIC CHANGES (incompatible with above now)- friction fixed, action_space_size=1 (same command to both wheels), more eval in train to select better policy
+9. much better
+10. reduced init state: pitch0 0.3->0.10, pitch_rate0: 0.3->0.15

@@ -9,7 +9,7 @@ import os
 from balance_env1 import BalanceEnv
 
 # ---- change per run (one place) ----
-RUN = 8
+RUN = 10
 MODEL_PATH = "../models/model1.xml"
 SAVE_DIR = "trained_policies1"
 # ------------------------------------
@@ -32,12 +32,12 @@ class SaveVecnorm(BaseCallback):
 
 check_env(make_env())
 
-v_env = make_vec_env(make_env, n_envs=8)
+v_env = make_vec_env(make_env, n_envs=8, seed=0)
 v_env = VecNormalize(v_env, norm_obs=True, norm_reward=False)
 
 # separate frozen env for evaluation (training=False -> apply stats, don't update them).
 # EvalCallback auto-syncs obs stats from v_env before each eval since both are VecNormalize.
-eval_env = make_vec_env(make_env, n_envs=1)
+eval_env = make_vec_env(make_env, n_envs=1, seed=10_000)
 eval_env = VecNormalize(eval_env, norm_obs=True, norm_reward=False, training=False)
 
 
@@ -65,7 +65,7 @@ eval_cb = EvalCallback(
     eval_env,
     best_model_save_path=best_dir,
     eval_freq=5000,
-    n_eval_episodes=10,
+    n_eval_episodes=50,
     deterministic=True,
     callback_on_new_best=SaveVecnorm(os.path.join(best_dir, "vecnorm.pkl")),
 )

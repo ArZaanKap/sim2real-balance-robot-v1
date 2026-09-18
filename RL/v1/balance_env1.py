@@ -31,7 +31,7 @@ class BalanceEnv(gym.Env):
         self.len_obs_hist = 3
 
         self.core_obs_len = 4 # pitch, pitch_rate, wl_w, wr_w
-        self.num_actions = 2
+        self.num_actions = 1 #2
 
         # 2 floats [-1,1] (left, right)
         self.action_space = Box(-1.0, 1.0, shape=(self.num_actions,), dtype=np.float32)
@@ -79,10 +79,12 @@ class BalanceEnv(gym.Env):
         self.model.actuator_gainprm[:, 0] = self.nominal_gain[:,0] * kt_R_f * vbus_f
         self.model.actuator_biasprm[:, 2] = self.nominal_bias[:, 2] * kt_R_f
 
-        # TIRE/FLOOR FRICTION DR
-        mu_f = self.np_random.uniform(0.6, 1.1) # lower mu means more slippery
+        # TIRE/FLOOR FRICTION DR - (geom_friction = sliding, torsional, rolling)
+        mu_slide_f = self.np_random.uniform(0.7, 1.1) # lower mu means more slippery
         for g in self.wheel_geom_ids:
-            self.model.geom_friction[g, 0] = self.nominal_geom_friction[g,0] * mu_f
+            self.model.geom_friction[g, 0] = self.nominal_geom_friction[g,0] * mu_slide_f
+        # TORSIONAL, ROLLING NOT DONE
+
 
         # frictionloss DEADBAND & armature DR
         for d in self.wheel_dof_ids:
@@ -95,8 +97,8 @@ class BalanceEnv(gym.Env):
         
 
         # INIT STATE DR - should add noise here too? else 1st clean?
-        pitch0 = self.np_random.uniform(-0.3, 0.3) # rad
-        pitch_rate0 = self.np_random.uniform(-0.3, 0.3) # rad/s
+        pitch0 = self.np_random.uniform(-0.10, 0.10) # rad
+        pitch_rate0 = self.np_random.uniform(-0.15, 0.15) # rad/s
 
         # qpos = [x, y, z, qw, qx, qy, qz] 
         self.data.qpos[3:7] = [np.cos(pitch0/2), 0.0, np.sin(pitch0/2), 0.0]  # amend quaternion to apply init rotation offset [3:7]
@@ -167,16 +169,17 @@ class BalanceEnv(gym.Env):
 
         gt_pitch = self.get_pitch()
 
+        # quadratic -> could test exp(-k*pitch^2)
         upright = 1.0 - (gt_pitch/self.fall_angle)**2
         #action_pen = -0.001 * np.sum(np.square(delayed_action)) # penalise large torques
 
-        action_rate_pen = 0.0
-        if self.prev_action is not None:
-            action_rate_pen = -0.002 * np.sum(np.square(delayed_action - self.prev_action))
+        #action_rate_pen = 0.0
+        #if self.prev_action is not None:
+            #action_rate_pen = -0.002 * np.sum(np.square(delayed_action - self.prev_action))
         
-        self.prev_action = delayed_action.copy()
+        #self.prev_action = delayed_action.copy()
 
-        reward = upright + action_rate_pen #action_pen
+        reward = upright #+ action_rate_pen #action_pen
 
         terminated = bool(abs(gt_pitch) > self.fall_angle)
         truncated = bool(self.step_count >= self.max_steps)
