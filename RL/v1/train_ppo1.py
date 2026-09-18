@@ -29,8 +29,8 @@ model = PPO("MlpPolicy", v_env, verbose=1, device="cpu",
             ent_coef=0.0,
             vf_coef=0.5, # value loss weight ratio vs ..?
             learning_rate=3e-4,
-            max_grad_norm=0.5,
-            normalize_advantage=False,
+            max_grad_norm=0.5, # how to check how much this is effecting?
+            normalize_advantage=True,
             seed=0,
             
         ) #explain all?
@@ -40,5 +40,5 @@ model.learn(total_timesteps=600_000) # 300k
 
 save_dir = "trained_policies1"
 os.makedirs(save_dir, exist_ok=True)
-model.save(os.path.join(save_dir,"ppo_balance5"))
-v_env.save(os.path.join(save_dir, "vecnorm5.pkl"))
+model.save(os.path.join(save_dir,"ppo_balance6"))
+v_env.save(os.path.join(save_dir, "vecnorm6.pkl"))

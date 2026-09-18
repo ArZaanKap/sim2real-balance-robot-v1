@@ -168,7 +168,7 @@ class BalanceEnv(gym.Env):
         gt_pitch = self.get_pitch()
 
         upright = 1.0 - (gt_pitch/self.fall_angle)**2
-        action_pen = -0.001 * np.sum(np.square(delayed_action)) # penalise large torques
+        #action_pen = -0.001 * np.sum(np.square(delayed_action)) # penalise large torques
 
         action_rate_pen = 0.0
         if self.prev_action is not None:
@@ -176,7 +176,7 @@ class BalanceEnv(gym.Env):
         
         self.prev_action = delayed_action.copy()
 
-        reward = upright + action_pen + action_rate_pen
+        reward = upright + action_rate_pen #action_pen
 
         terminated = bool(abs(gt_pitch) > self.fall_angle)
         truncated = bool(self.step_count >= self.max_steps)
