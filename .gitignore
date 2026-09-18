@@ -29,5 +29,9 @@ BAM/fit/params*.json
 .vscode/
 .DS_Store
 
+# Local AI assistant instructions
+/CLAUDE.md
+/AGENTS.md
+
 # Note: sdkconfig IS committed on purpose (no sdkconfig.defaults in these projects,
 # so sdkconfig is the only record of target + config). Delete it here to ignore instead.
