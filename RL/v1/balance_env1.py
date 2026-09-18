@@ -172,7 +172,7 @@ class BalanceEnv(gym.Env):
 
         action_rate_pen = 0.0
         if self.prev_action is not None:
-            action_rate_pen = -0.005 * np.sum(np.square(delayed_action - self.prev_action))
+            action_rate_pen = -0.002 * np.sum(np.square(delayed_action - self.prev_action))
         
         self.prev_action = delayed_action.copy()
 

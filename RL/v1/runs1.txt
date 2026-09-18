@@ -3,4 +3,6 @@
 3. gamma -> 0.997, not as good
 4. run2 trained 400k -> 600k
 5. run4, normalize advantage false - FAILED, turned back True
-6. gamma 0.995, 600k, action pen disabled (dont want to penalise large actions)
+6. gamma 0.995, 600k, action pen disabled (dont want to penalise large actions) - OK, BUT LEARNED TO BE JERKY
+7. run6 but action_rate_pen k=-0.005 -> k=-0.01
+8. run6 but action_rate_pen k=-0.005 -> k=-0.002
