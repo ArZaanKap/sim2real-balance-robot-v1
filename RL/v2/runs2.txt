@@ -1,0 +1,6 @@
+EXTENSION OF V1, STILL BALANCE ONLY
+
+# continue from v1 which found a good policy
+# now using hardcoded norms not VecNorm
+
+1. 

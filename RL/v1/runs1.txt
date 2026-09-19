@@ -13,3 +13,5 @@ DRASTIC CHANGES (incompatible with above now)- friction fixed, action_space_size
 11. run10 + action-rate penalty k=-0.002 readded - EVEN BETTER, smoother, but best policy half way through, not last
 12. REGRESS test, action space = 2 from 1, left right - FAILED, expected
 13. run11 but entropy_coef 0.0 -> 0.005
+14. run11 but adv norm false, test again, FAILED
+15. run11 but max_grad_norm 0.5 -> 1.0, ###

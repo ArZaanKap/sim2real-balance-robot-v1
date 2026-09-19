@@ -1,44 +1,31 @@
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3.common.vec_env import VecNormalize
-from stable_baselines3.common.callbacks import EvalCallback, BaseCallback
+from stable_baselines3.common.callbacks import EvalCallback
 
 import os
 
-from balance_env1 import BalanceEnv
+from balance_env2 import BalanceEnv
 
 # ---- change per run (one place) ----
-RUN = 15
+RUN = 1
 MODEL_PATH = "../models/model1.xml"
-SAVE_DIR = "trained_policies1"
+SAVE_DIR = "trained_policies2"
 # ------------------------------------
 
 make_env = lambda: BalanceEnv(model_path=MODEL_PATH)   # reused for train + eval envs
 best_dir = os.path.join(SAVE_DIR, f"best{RUN}")        # EvalCallback writes best_model.zip here
 
 
-# saves the CURRENT vecnorm stats whenever EvalCallback hits a new best,
-# so best_model.zip is paired with the obs-normalisation from the SAME instant
-# (EvalCallback alone only saves the policy, not the stats -> mismatch at play/sim2real)
-class SaveVecnorm(BaseCallback):
-    def __init__(self, save_path):
-        super().__init__()
-        self.save_path = save_path
-    def _on_step(self):
-        self.model.get_vec_normalize_env().save(self.save_path)
-        return True
-
-
+# NO VecNormalize now: the env emits already-normalised obs (fixed hardcoded
+# scales, mean 0). So there are no running stats to save/pair -> best_model.zip
+# is fully self-contained, and play/eval/firmware all use the SAME fixed divide.
 check_env(make_env())
 
 v_env = make_vec_env(make_env, n_envs=8, seed=0)
-v_env = VecNormalize(v_env, norm_obs=True, norm_reward=False)
 
-# separate frozen env for evaluation (training=False -> apply stats, don't update them).
-# EvalCallback auto-syncs obs stats from v_env before each eval since both are VecNormalize.
+# separate eval env on a different fixed seed set (frozen, never trains)
 eval_env = make_vec_env(make_env, n_envs=1, seed=10_000)
-eval_env = VecNormalize(eval_env, norm_obs=True, norm_reward=False, training=False)
 
 
 model = PPO("MlpPolicy", v_env, verbose=1, device="cpu",
@@ -48,11 +35,11 @@ model = PPO("MlpPolicy", v_env, verbose=1, device="cpu",
             n_epochs=10,
             gamma=0.995,
             gae_lambda=0.95,
-            ent_coef=0.0,
+            ent_coef=0.005,  # run 13 proved: 0.0 collapses after best; 0.005 holds
             vf_coef=0.5, # value loss weight ratio vs ..?
             learning_rate=3e-4,
-            max_grad_norm=1.0, # try? 0.5
-            normalize_advantage=True, 
+            max_grad_norm=0.5, # keep tight; 1.0 permits bigger steps -> late instability
+            normalize_advantage=True,
             seed=0,
         ) #explain all?
 
@@ -60,18 +47,16 @@ model = PPO("MlpPolicy", v_env, verbose=1, device="cpu",
 os.makedirs(SAVE_DIR, exist_ok=True)
 
 # best-so-far checkpoint by mean eval reward. eval_freq is PER-ENV -> 5000*8 = 40k global steps.
-# on a new best it saves best{RUN}/best_model.zip AND best{RUN}/vecnorm.pkl (via callback_on_new_best).
+# on a new best it saves best{RUN}/best_model.zip (no vecnorm to pair now).
 eval_cb = EvalCallback(
     eval_env,
     best_model_save_path=best_dir,
     eval_freq=5000,
     n_eval_episodes=50,
     deterministic=True,
-    callback_on_new_best=SaveVecnorm(os.path.join(best_dir, "vecnorm.pkl")),
 )
 
 model.learn(total_timesteps=400_000, callback=eval_cb) # 300k
 
 # final-weights save kept too, so you can compare best-vs-final
 model.save(os.path.join(SAVE_DIR, f"ppo_balance{RUN}"))
-v_env.save(os.path.join(SAVE_DIR, f"vecnorm{RUN}.pkl"))
