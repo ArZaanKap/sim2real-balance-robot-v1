@@ -9,7 +9,7 @@ import os
 from balance_env1 import BalanceEnv
 
 # ---- change per run (one place) ----
-RUN = 11
+RUN = 13
 MODEL_PATH = "../models/model1.xml"
 SAVE_DIR = "trained_policies1"
 # ------------------------------------
@@ -48,11 +48,11 @@ model = PPO("MlpPolicy", v_env, verbose=1, device="cpu",
             n_epochs=10,
             gamma=0.995,
             gae_lambda=0.95,
-            ent_coef=0.0,
+            ent_coef=0.005,
             vf_coef=0.5, # value loss weight ratio vs ..?
             learning_rate=3e-4,
-            max_grad_norm=0.5, # how to check how much this is effecting?
-            normalize_advantage=True,
+            max_grad_norm=0.5, # try?
+            normalize_advantage=True, # try again?
             seed=0,
         ) #explain all?
 
