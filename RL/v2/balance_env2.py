@@ -30,8 +30,19 @@ class BalanceEnv(gym.Env):
         self.len_action_hist = 3
         self.len_obs_hist = 3
 
-        self.core_obs_len = 4 # pitch, pitch_rate, wl_w, wr_w
+        self.state_len = 4 # s_t = [pitch, pitch_rate, wl_w, wr_w]
         self.num_actions = 1 #2
+
+        # OBS normalization (x - mu) / std
+        # mu=0 since all symmetric, make std for all ~= 1.0 (VALUES FROM V1)
+        state_stds = np.array([0.15, 0.5, 5.0, 5.0], dtype=np.float32)
+        action_stds = np.array([1.0], dtype=np.float32)
+
+        self.OBS_stds = np.concatenate([
+            state_stds,
+            np.tile(action_stds, self.len_action_hist),
+            np.tile(state_stds, self.len_obs_hist),
+        ]).astype(np.float32)
 
         # 2 floats [-1,1] (left, right)
         self.action_space = Box(-1.0, 1.0, shape=(self.num_actions,), dtype=np.float32)
@@ -39,12 +50,12 @@ class BalanceEnv(gym.Env):
         # pitch from imu (on board filter), pitch rate (imu gyro raw y), wheel_w: differentiate encoder readings + 1st order filter (in sim read raw vel + DR)
         # [(pitch, pitch_rate, wl_w, wr_w), action_hist, obs_hist] 
         self.observation_space = Box(-np.inf, np.inf, 
-            shape=(self.core_obs_len*(self.len_obs_hist+1) + self.num_actions*(self.len_action_hist),),
+            shape=(self.state_len*(self.len_obs_hist+1) + self.num_actions*(self.len_action_hist),),
             dtype=np.float32)
 
         # histories for obs
         self.action_hist = np.zeros(self.num_actions * self.len_action_hist) # 2 * 3  # store prev N actions
-        self.obs_hist = np.zeros(self.core_obs_len * self.len_obs_hist) # store prev N observations
+        self.obs_hist = np.zeros(self.state_len * self.len_obs_hist) # store prev N observations
 
         self.physics_substeps = 5 # 500hz physics vs 100hz control
         self.step_count = 0
@@ -55,6 +66,12 @@ class BalanceEnv(gym.Env):
         self.prev_action = None
 
 
+    def _normalize(self, full_obs):
+        # clip for safety
+        # mu=0   (x-mu)/std
+        return np.clip(full_obs / self.OBS_stds, -10.0, 10.0).astype(np.float32)
+
+
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
 
@@ -62,7 +79,7 @@ class BalanceEnv(gym.Env):
 
         # reset histories
         self.action_hist = np.zeros(self.num_actions * self.len_action_hist, dtype=np.float32) # 2 * 3  # or deque?
-        self.obs_hist = np.zeros(self.core_obs_len * self.len_obs_hist, dtype=np.float32)
+        self.obs_hist = np.zeros(self.state_len * self.len_obs_hist, dtype=np.float32)
 
         # reset pre action cos new episode starts
         self.prev_action = None
@@ -113,7 +130,7 @@ class BalanceEnv(gym.Env):
 
         # has to match step()?
         full_obs = np.array([*self._get_obs(), *self.action_hist, *self.obs_hist], dtype=np.float32)
-        return full_obs, {}
+        return self._normalize(full_obs), {}
     
     # helper to get pitch
     def get_pitch(self):
@@ -161,8 +178,8 @@ class BalanceEnv(gym.Env):
         full_obs = np.array([*obs, *self.action_hist, *self.obs_hist], dtype=np.float32)  # full obs to return
 
         # update obs hist here
-        self.obs_hist = np.roll(self.obs_hist, self.core_obs_len)
-        self.obs_hist[0:self.core_obs_len] = obs
+        self.obs_hist = np.roll(self.obs_hist, self.state_len)
+        self.obs_hist[0:self.state_len] = obs
 
         # ---- REWARDS ---- #
         # use GT vals from sim - not noisy vals from obs
@@ -175,7 +192,7 @@ class BalanceEnv(gym.Env):
 
         action_rate_pen = 0.0
         if self.prev_action is not None:
-            action_rate_pen = -0.002 * np.sum(np.square(action - self.prev_action))
+            action_rate_pen = -0.02 * np.sum(np.square(action - self.prev_action))
         
         self.prev_action = action.copy()
 
@@ -184,4 +201,4 @@ class BalanceEnv(gym.Env):
         terminated = bool(abs(gt_pitch) > self.fall_angle)
         truncated = bool(self.step_count >= self.max_steps)
 
-        return full_obs, float(reward), terminated, truncated, {}
+        return self._normalize(full_obs), float(reward), terminated, truncated, {}

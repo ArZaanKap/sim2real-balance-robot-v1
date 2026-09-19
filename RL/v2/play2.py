@@ -4,7 +4,7 @@ from stable_baselines3 import PPO
 from balance_env2 import BalanceEnv
 
 # ---- pick what to play (one place) ----
-RUN = 1
+RUN = 4
 MODEL_PATH = "../models/model1.xml"
 SAVE_DIR = "trained_policies2"
 USE_BEST = True   # True -> best{RUN}/ checkpoint (save-best); False -> final ppo_balance{RUN}

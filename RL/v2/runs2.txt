@@ -3,4 +3,8 @@ EXTENSION OF V1, STILL BALANCE ONLY
 # continue from v1 which found a good policy
 # now using hardcoded norms not VecNorm
 
-1. 
+1. very jerky, but balances well - best policy lost
+2. action_rate_pen -0.002 -> -0.005
+3. action_rate_pen -0.005 -> -0.02
+4. run3 but entropy_coef 0.005 -> 0.0
+5. 

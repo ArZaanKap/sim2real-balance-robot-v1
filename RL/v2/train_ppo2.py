@@ -8,7 +8,7 @@ import os
 from balance_env2 import BalanceEnv
 
 # ---- change per run (one place) ----
-RUN = 1
+RUN = 4
 MODEL_PATH = "../models/model1.xml"
 SAVE_DIR = "trained_policies2"
 # ------------------------------------
@@ -35,7 +35,7 @@ model = PPO("MlpPolicy", v_env, verbose=1, device="cpu",
             n_epochs=10,
             gamma=0.995,
             gae_lambda=0.95,
-            ent_coef=0.005,  # run 13 proved: 0.0 collapses after best; 0.005 holds
+            ent_coef=0.0,  # 0.005
             vf_coef=0.5, # value loss weight ratio vs ..?
             learning_rate=3e-4,
             max_grad_norm=0.5, # keep tight; 1.0 permits bigger steps -> late instability
