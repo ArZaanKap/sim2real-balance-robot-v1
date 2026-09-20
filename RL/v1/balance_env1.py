@@ -50,7 +50,7 @@ class BalanceEnv(gym.Env):
         self.step_count = 0
         self.max_steps = 2000
 
-        self.fall_angle = 0.6   # rad - TERMINAL
+        self.fall_angle = 0.6   # rad - TERMINAL - 0.6
 
         self.prev_action = None
 

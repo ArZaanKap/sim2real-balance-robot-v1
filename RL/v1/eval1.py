@@ -21,6 +21,10 @@ from balance_env1 import BalanceEnv
 MODEL_PATH = "../models/model1.xml"
 SAVE_DIR = "trained_policies1"
 
+# episode length for the audit; must be identical across every policy you compare
+EPISODE_SECONDS = 30.0
+EPISODE_STEPS = int(round(EPISODE_SECONDS / 0.01))  # 100 Hz control -> steps
+
 
 def load_policy(run, use_best, make_env):
     if use_best:
@@ -99,6 +103,7 @@ def evaluate(run, use_best, seeds):
     make_env = lambda: BalanceEnv(model_path=MODEL_PATH)
     label, model, vecnorm = load_policy(run, use_best, make_env)
     env = make_env()
+    env.max_steps = EPISODE_STEPS   # override the env default (2000=20s) for this audit
     episodes = [run_episode(model, vecnorm, env, seed) for seed in seeds]
 
     steps = np.asarray([ep["steps"] for ep in episodes])
@@ -148,7 +153,7 @@ def main():
         print(f"episodes:                  {metrics['episodes']:8d}")
         print(f"mean survival:             {metrics['mean_survival_s']:8.2f} s")
         print(f"median survival:           {metrics['median_survival_s']:8.2f} s")
-        print(f"20-second success:         {metrics['success_pct']:8.1f} %")
+        print(f"{EPISODE_SECONDS:.0f}-second success:         {metrics['success_pct']:8.1f} %")
         print(f"fell within 1 second:      {metrics['fell_under_1s_pct']:8.1f} %")
         print(f"pitch RMS:                 {metrics['pitch_rms_deg']:8.2f} deg")
         print(f"mean |action|:             {metrics['mean_abs_action']:8.3f}")

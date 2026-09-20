@@ -51,7 +51,7 @@ model = PPO("MlpPolicy", v_env, verbose=1, device="cpu",
             ent_coef=0.0,
             vf_coef=0.5, # value loss weight ratio vs ..?
             learning_rate=3e-4,
-            max_grad_norm=1.0, # try? 0.5
+            max_grad_norm=0.5, # try? 0.5
             normalize_advantage=True, 
             seed=0,
         ) #explain all?
