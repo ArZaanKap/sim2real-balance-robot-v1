@@ -10,10 +10,24 @@
 #include "driver/pulse_cnt.h"
 #include "driver/gpio.h"
 
+#include "driver/ledc.h"
+
 
 static const char *TAG = "bringup";
 
 // pins + consts
+
+// motor
+#define MOT_L_IN1_GPIO        25
+#define MOT_L_IN2_GPIO        26
+#define MOT_R_IN1_GPIO        27
+#define MOT_R_IN2_GPIO        14
+
+#define PWM_FREQ_HZ     20000                        
+#define PWM_RES         LEDC_TIMER_8_BIT     // 8-bit -> duty range 0..255 (same as Arduino)
+#define COMMAND       180
+
+// encoder
 #define ENC_L_A_GPIO 32
 #define ENC_L_B_GPIO 33
 #define ENC_R_A_GPIO 4
@@ -23,11 +37,22 @@ static const char *TAG = "bringup";
 #define PCNT_LOW_LIMIT (-3000) // min till counter reset to 0
 #define GLITCH_NS 1000  // <N nanosecs then ignore encoder reading
 #define COUNTS_PER_REV 1976.0f // measured ourselves
-#define SAMPLE_MS 20 // ??
+#define SAMPLE_MS 20 // (1/hz) latency of measurements
+
+
+// MOTOR
+typedef struct{
+    ledc_channel_t in1_ch, in2_ch;
+} motor_t;
+
+static motor_t mot_l = {LEDC_CHANNEL_0, LEDC_CHANNEL_1};
+static motor_t mot_r = {LEDC_CHANNEL_2, LEDC_CHANNEL_3};
+
+
+// ENCODER
 
 // overflow = big running total, edited by ISR (Interrupt Service Routine)
 // when something counter hits +/-3000
-
 typedef struct {
     pcnt_unit_handle_t unit; // handle
     volatile int64_t overflow; // volatile - standard for variables accessed by interrupts and main?
@@ -37,6 +62,53 @@ typedef struct {
 static encoder_t enc_l;
 static encoder_t enc_r;
 
+
+// ----------- MOTOR FUNCTIONS --------------- // 
+static void ledc_common_init(void){
+    ledc_timer_config_t tcfg = {
+        .speed_mode = LEDC_LOW_SPEED_MODE, // ??
+        .timer_num = LEDC_TIMER_0,
+        .duty_resolution = PWM_RES,
+        .freq_hz = PWM_FREQ_HZ,
+        .clk_cfg = LEDC_AUTO_CLK,
+    };
+    ESP_ERROR_CHECK(ledc_timer_config(&tcfg));
+    ESP_ERROR_CHECK(ledc_fade_func_install(0)); // ONCE, globally — or set_duty sticks at 0
+}
+
+static void motor_init(motor_t *m, int in1_gpio, int in2_gpio){
+    ledc_channel_config_t ccfg = {
+        .speed_mode = LEDC_LOW_SPEED_MODE,
+        .timer_sel  = LEDC_TIMER_0,
+        .intr_type  = LEDC_INTR_DISABLE,
+        .duty = 0, 
+        .hpoint = 0,
+        .channel = m->in1_ch, 
+        .gpio_num = in1_gpio,
+    };
+    // whats happening under here now?
+    ESP_ERROR_CHECK(ledc_channel_config(&ccfg));   // IN1
+
+    ccfg.channel  = m->in2_ch;
+    ccfg.gpio_num = in2_gpio;
+    ESP_ERROR_CHECK(ledc_channel_config(&ccfg));   // IN2
+
+    ESP_LOGI(TAG, "motor ready: IN1=GPIO%d IN2=GPIO%d", in1_gpio, in2_gpio);
+}
+
+static void motor_drive(motor_t *m, int duty){
+    if (duty >  255) duty =  255;
+    if (duty < -255) duty = -255;
+    int in1 = (duty > 0) ?  duty : 0;
+    int in2 = (duty < 0) ? -duty : 0;
+
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, m->in1_ch, in1);
+    ledc_update_duty(LEDC_LOW_SPEED_MODE, m->in1_ch);
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, m->in2_ch, in2);
+    ledc_update_duty(LEDC_LOW_SPEED_MODE, m->in2_ch);
+}
+
+// ------ ENCODER FUNCTIONS ------------ //
 
 // ISR runs automatically on a +/-3000 watch_point. 
 // IRAM_ATTR -> put this func in fast RAM
@@ -84,14 +156,10 @@ static void encoder_init(encoder_t *e, int a_gpio, int b_gpio){
     // 4) The quadrature truth table, expressed as edge + level actions.
     //    (This is the canonical ESP-IDF rotary-encoder config: count on both edges of both channels,
     //     direction flips based on the other channel's level.)
-    ESP_ERROR_CHECK(pcnt_channel_set_edge_action(chan_a,
-        PCNT_CHANNEL_EDGE_ACTION_DECREASE, PCNT_CHANNEL_EDGE_ACTION_INCREASE));   // A rising/falling
-    ESP_ERROR_CHECK(pcnt_channel_set_level_action(chan_a,
-        PCNT_CHANNEL_LEVEL_ACTION_KEEP, PCNT_CHANNEL_LEVEL_ACTION_INVERSE));      // gated by B
-    ESP_ERROR_CHECK(pcnt_channel_set_edge_action(chan_b,
-        PCNT_CHANNEL_EDGE_ACTION_INCREASE, PCNT_CHANNEL_EDGE_ACTION_DECREASE));   // B rising/falling
-    ESP_ERROR_CHECK(pcnt_channel_set_level_action(chan_b,
-        PCNT_CHANNEL_LEVEL_ACTION_KEEP, PCNT_CHANNEL_LEVEL_ACTION_INVERSE));      // gated by A
+    ESP_ERROR_CHECK(pcnt_channel_set_edge_action(chan_a, PCNT_CHANNEL_EDGE_ACTION_DECREASE, PCNT_CHANNEL_EDGE_ACTION_INCREASE));   // A rising/falling
+    ESP_ERROR_CHECK(pcnt_channel_set_level_action(chan_a, PCNT_CHANNEL_LEVEL_ACTION_KEEP, PCNT_CHANNEL_LEVEL_ACTION_INVERSE));      // gated by B
+    ESP_ERROR_CHECK(pcnt_channel_set_edge_action(chan_b, PCNT_CHANNEL_EDGE_ACTION_INCREASE, PCNT_CHANNEL_EDGE_ACTION_DECREASE));   // B rising/falling
+    ESP_ERROR_CHECK(pcnt_channel_set_level_action(chan_b, PCNT_CHANNEL_LEVEL_ACTION_KEEP, PCNT_CHANNEL_LEVEL_ACTION_INVERSE));      // gated by A
     // If the sign comes out backwards vs the direction you spin, swap A and B wires (or swap the
     // INCREASE/DECREASE pair on one channel). Easiest fix is at the connector.
 
@@ -117,11 +185,13 @@ static void encoder_init(encoder_t *e, int a_gpio, int b_gpio){
 }
 
 
-
-
 void app_main(void)
 {
     //ESP_LOGI(TAG, "bringup skeleton up");
+
+    ledc_common_init();
+    motor_init(&mot_l, MOT_L_IN1_GPIO, MOT_L_IN2_GPIO);
+    motor_init(&mot_r, MOT_R_IN1_GPIO, MOT_R_IN2_GPIO);
 
     encoder_init(&enc_l, ENC_L_A_GPIO, ENC_L_B_GPIO);
     encoder_init(&enc_r, ENC_R_A_GPIO, ENC_R_B_GPIO);
@@ -129,16 +199,28 @@ void app_main(void)
     int64_t last_pos_l = read_position(&enc_l);
     int64_t last_pos_r = read_position(&enc_r);
 
+    int tick = 0;
     while (1) {
-        vTaskDelay(pdMS_TO_TICKS(SAMPLE_MS));
+        vTaskDelay(pdMS_TO_TICKS(SAMPLE_MS)); // 20ms for now
 
+        // MOTOR
+        // 20ms * 50 = every 1s switch mode
+        int phase = (tick / 50) % 4; // forward, stop, backward, stop
+        int drive = (phase==0) ? COMMAND : (phase==2) ? -COMMAND : 0;
+        motor_drive(&mot_l, drive);
+        motor_drive(&mot_r, drive);
+        tick++;
+
+
+        // ENCODER
         int64_t pos_l = read_position(&enc_l); // encoder counts
         int64_t pos_r = read_position(&enc_r);
 
-        // what are we actually doing here??
+        // difference in encoder counts / COUNTS_PER_REV = revs (in 20ms)
         float revs_l = (float)(pos_l - last_pos_l) / COUNTS_PER_REV; // convert encoder counts -> revolutions
         float revs_r = (float)(pos_r - last_pos_r) / COUNTS_PER_REV; // convert encoder counts -> revolutions
         
+        // revs * 2pi = radians moved during 1 sample - scale by Hz to get radians per sec
         float rads_l = revs_l * 6.283185f * (1000.0f / (float)SAMPLE_MS);
         float rads_r = revs_r * 6.283185f * (1000.0f / (float)SAMPLE_MS);
 
