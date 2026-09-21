@@ -12,24 +12,24 @@
 
 #include "driver/ledc.h"
 
-
+// compare with standalone files - make modular next
 static const char *TAG = "bringup";
 
 // pins + consts
 
 // motor
-#define MOT_L_IN1_GPIO        25
-#define MOT_L_IN2_GPIO        26
-#define MOT_R_IN1_GPIO        27
-#define MOT_R_IN2_GPIO        14
+#define MOT_L_IN1_GPIO        27
+#define MOT_L_IN2_GPIO        14
+#define MOT_R_IN1_GPIO        25
+#define MOT_R_IN2_GPIO        26
 
 #define PWM_FREQ_HZ     20000                        
 #define PWM_RES         LEDC_TIMER_8_BIT     // 8-bit -> duty range 0..255 (same as Arduino)
 #define COMMAND       180
 
 // encoder
-#define ENC_L_A_GPIO 32
-#define ENC_L_B_GPIO 33
+#define ENC_L_A_GPIO 33
+#define ENC_L_B_GPIO 32
 #define ENC_R_A_GPIO 4
 #define ENC_R_B_GPIO 13
 
