@@ -7,10 +7,23 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
+#include "esp_attr.h"
+#include "esp_err.h"
+#include "esp_timer.h"
+
 #include "driver/pulse_cnt.h"
 #include "driver/gpio.h"
-
 #include "driver/ledc.h"
+
+#include <math.h>
+#include <string.h>
+
+#include "driver/gpio.h"
+#include "driver/spi_master.h"
+#include "sh2.h"
+#include "sh2_SensorValue.h"
+#include "sh2_err.h"
+#include "sh2_hal.h"
 
 // compare with standalone files - make modular next
 static const char *TAG = "bringup";
@@ -18,14 +31,14 @@ static const char *TAG = "bringup";
 // pins + consts
 
 // motor
-#define MOT_L_IN1_GPIO        27
-#define MOT_L_IN2_GPIO        14
-#define MOT_R_IN1_GPIO        25
-#define MOT_R_IN2_GPIO        26
+#define MOT_L_IN1_GPIO 27
+#define MOT_L_IN2_GPIO 14
+#define MOT_R_IN1_GPIO 25
+#define MOT_R_IN2_GPIO 26
 
-#define PWM_FREQ_HZ     20000                        
-#define PWM_RES         LEDC_TIMER_8_BIT     // 8-bit -> duty range 0..255 (same as Arduino)
-#define COMMAND       180
+#define PWM_FREQ_HZ 20000                        
+#define PWM_RES  LEDC_TIMER_8_BIT     // 8-bit -> duty range 0..255 (same as Arduino)
+#define COMMAND  180
 
 // encoder
 #define ENC_L_A_GPIO 33
@@ -39,6 +52,26 @@ static const char *TAG = "bringup";
 #define COUNTS_PER_REV 1976.0f // measured ourselves
 #define SAMPLE_MS 20 // (1/hz) latency of measurements
 
+// imu
+#define IMU_SPI_HOST       SPI3_HOST
+#define IMU_SCK_GPIO       GPIO_NUM_18
+#define IMU_MISO_GPIO      GPIO_NUM_19
+#define IMU_MOSI_GPIO      GPIO_NUM_23
+#define IMU_CS_GPIO        GPIO_NUM_17
+#define IMU_INT_GPIO       GPIO_NUM_21
+#define IMU_RST_GPIO       GPIO_NUM_22
+#define IMU_WAKE_GPIO      GPIO_NUM_16
+
+// The BNO08X limit is 3 MHz. Two MHz conservative for breadboard and jumper wires.
+#define IMU_SPI_HZ         2000000
+#define RESET_HOLD_MS      10
+#define READY_TIMEOUT_MS   2000
+#define REPORT_INTERVAL_US 10000  // 100 Hz
+#define SHTP_HEADER_LEN    4
+#define RAD_TO_DEG         57.29577951308232f
+
+
+// GLOBALS //
 
 // MOTOR
 typedef struct{
@@ -61,6 +94,44 @@ typedef struct {
 // init both
 static encoder_t enc_l;
 static encoder_t enc_r;
+
+
+// IMU 
+typedef struct {
+    sh2_Hal_t hal;
+    spi_device_handle_t spi;
+    bool bus_initialized;
+    bool device_added;
+    uint8_t pending_rx[SH2_HAL_MAX_TRANSFER_OUT];
+    size_t pending_rx_len;
+    uint32_t pending_timestamp_us;
+} esp32_sh2_hal_t;
+
+static esp32_sh2_hal_t s_hal;
+// DMA reads directly from this buffer during long inbound SHTP packets, so it
+// must live in internal DMA-capable RAM rather than flash-backed const data.
+static DMA_ATTR uint8_t s_tx_zeroes[SH2_HAL_MAX_TRANSFER_IN] = {0};
+
+typedef struct {
+    bool have_quaternion;
+    bool have_accel;
+    bool have_gyro;
+    uint8_t accuracy;
+    uint32_t sample_count;
+    float real;
+    float i;
+    float j;
+    float k;
+    float ax;
+    float ay;
+    float az;
+    float gx;
+    float gy;
+    float gz;
+} latest_data_t;
+
+static latest_data_t s_latest;
+static bool s_runtime_reset;
 
 
 // ----------- MOTOR FUNCTIONS --------------- // 
@@ -185,8 +256,247 @@ static void encoder_init(encoder_t *e, int a_gpio, int b_gpio){
 }
 
 
-void app_main(void)
+// ----- IMU FUNCTIONS -------- //
+static bool wait_for_int_low(uint32_t timeout_ms)
 {
+    int64_t deadline_us = esp_timer_get_time() + ((int64_t)timeout_ms * 1000);
+    while (gpio_get_level(IMU_INT_GPIO) != 0) {
+        if (esp_timer_get_time() >= deadline_us) {
+            return false;
+        }
+        vTaskDelay(1);
+    }
+    return true;
+}
+
+static esp_err_t spi_exchange(const void *tx, void *rx, size_t len)
+{
+    spi_transaction_t transaction = {
+        .length = len * 8,
+        .tx_buffer = tx,
+        .rx_buffer = rx,
+    };
+    return spi_device_polling_transmit(s_hal.spi, &transaction);
+}
+
+static int hal_open(sh2_Hal_t *self){
+    (void)self;
+
+    // Assert reset before setting the SPI-mode strap.  The module may have
+    // briefly powered up in its default I2C mode before the ESP32 booted.
+    gpio_config_t output_config = {
+        .pin_bit_mask = (1ULL << IMU_CS_GPIO) |
+                        (1ULL << IMU_RST_GPIO) |
+                        (1ULL << IMU_WAKE_GPIO),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    if (gpio_config(&output_config) != ESP_OK) {
+        return SH2_ERR_IO;
+    }
+    gpio_set_level(IMU_RST_GPIO, 0);
+    gpio_set_level(IMU_CS_GPIO, 1);
+    gpio_set_level(IMU_WAKE_GPIO, 1);  // PS0=1; external PS1 must also be 1.
+
+    gpio_config_t input_config = {
+        .pin_bit_mask = 1ULL << IMU_INT_GPIO,
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    if (gpio_config(&input_config) != ESP_OK) {
+        return SH2_ERR_IO;
+    }
+
+    spi_bus_config_t bus_config = {
+        .mosi_io_num = IMU_MOSI_GPIO,
+        .miso_io_num = IMU_MISO_GPIO,
+        .sclk_io_num = IMU_SCK_GPIO,
+        .quadwp_io_num = -1,
+        .quadhd_io_num = -1,
+        .max_transfer_sz = SH2_HAL_MAX_TRANSFER_IN,
+    };
+    // Without DMA the classic ESP32 SPI driver caps transactions at 64 bytes;
+    // BNO08X startup and sensor packets can be considerably larger.
+    esp_err_t err = spi_bus_initialize(IMU_SPI_HOST, &bus_config, SPI_DMA_CH_AUTO);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "spi_bus_initialize failed: %s", esp_err_to_name(err));
+        return SH2_ERR_IO;
+    }
+    s_hal.bus_initialized = true;
+
+    // CS is driven manually because a BNO08X read uses two transfers (header
+    // then body) while CS must remain low between them.
+    spi_device_interface_config_t device_config = {
+        .clock_speed_hz = IMU_SPI_HZ,
+        .mode = 3,
+        .spics_io_num = -1,
+        .queue_size = 1,
+    };
+    err = spi_bus_add_device(IMU_SPI_HOST, &device_config, &s_hal.spi);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "spi_bus_add_device failed: %s", esp_err_to_name(err));
+        spi_bus_free(IMU_SPI_HOST);
+        s_hal.bus_initialized = false;
+        return SH2_ERR_IO;
+    }
+    s_hal.device_added = true;
+    s_hal.pending_rx_len = 0;
+
+    vTaskDelay(pdMS_TO_TICKS(RESET_HOLD_MS));
+    gpio_set_level(IMU_RST_GPIO, 1);
+
+    ESP_LOGI(TAG, "reset released with PS1=HIGH and PS0=HIGH; waiting for INT LOW");
+    if (!wait_for_int_low(READY_TIMEOUT_MS)) {
+        ESP_LOGE(TAG, "BNO08X did not assert INT within %d ms", READY_TIMEOUT_MS);
+        ESP_LOGE(TAG, "check PS1=3.3V, PS0=GPIO16, INT=GPIO21 and RST=GPIO22");
+        return SH2_ERR_TIMEOUT;
+    }
+
+    ESP_LOGI(TAG, "INT is LOW: BNO08X has completed reset and is ready");
+    return SH2_OK;
+}
+
+static void hal_close(sh2_Hal_t *self){
+    (void)self;
+    gpio_set_level(IMU_RST_GPIO, 0);
+    gpio_set_level(IMU_CS_GPIO, 1);
+
+    if (s_hal.device_added) {
+        spi_bus_remove_device(s_hal.spi);
+        s_hal.device_added = false;
+    }
+    if (s_hal.bus_initialized) {
+        spi_bus_free(IMU_SPI_HOST);
+        s_hal.bus_initialized = false;
+    }
+}
+
+static int copy_pending_read(uint8_t *buffer, unsigned capacity, uint32_t *timestamp_us){
+    if (s_hal.pending_rx_len == 0) {
+        return 0;
+    }
+    if (capacity < s_hal.pending_rx_len) {
+        s_hal.pending_rx_len = 0;
+        return SH2_ERR_BAD_PARAM;
+    }
+
+    size_t len = s_hal.pending_rx_len;
+    memcpy(buffer, s_hal.pending_rx, len);
+    *timestamp_us = s_hal.pending_timestamp_us;
+    s_hal.pending_rx_len = 0;
+    return (int)len;
+}
+
+static int hal_read(sh2_Hal_t *self, uint8_t *buffer, unsigned capacity,
+                    uint32_t *timestamp_us)
+{
+    (void)self;
+    if ((buffer == NULL) || (timestamp_us == NULL)) {
+        return SH2_ERR_BAD_PARAM;
+    }
+
+    int pending = copy_pending_read(buffer, capacity, timestamp_us);
+    if (pending != 0) {
+        return pending;
+    }
+    if (gpio_get_level(IMU_INT_GPIO) != 0) {
+        return 0;
+    }
+
+    *timestamp_us = (uint32_t)esp_timer_get_time();
+    gpio_set_level(IMU_CS_GPIO, 0);
+
+    esp_err_t err = spi_exchange(s_tx_zeroes, buffer, SHTP_HEADER_LEN);
+    if (err != ESP_OK) {
+        gpio_set_level(IMU_CS_GPIO, 1);
+        ESP_LOGE(TAG, "SPI header read failed: %s", esp_err_to_name(err));
+        return SH2_ERR_IO;
+    }
+
+    size_t packet_len = ((size_t)buffer[0] | ((size_t)buffer[1] << 8)) & 0x7FFF;
+    if ((packet_len <= SHTP_HEADER_LEN) || (packet_len > capacity)) {
+        gpio_set_level(IMU_CS_GPIO, 1);
+        if (packet_len > capacity) {
+            ESP_LOGE(TAG, "incoming SHTP packet (%u bytes) exceeds buffer (%u)",
+                     (unsigned)packet_len, capacity);
+            return SH2_ERR_BAD_PARAM;
+        }
+        return 0;
+    }
+
+    err = spi_exchange(s_tx_zeroes, buffer + SHTP_HEADER_LEN,
+                       packet_len - SHTP_HEADER_LEN);
+    gpio_set_level(IMU_CS_GPIO, 1);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "SPI body read failed: %s", esp_err_to_name(err));
+        return SH2_ERR_IO;
+    }
+
+    return (int)packet_len;
+}
+
+static int hal_write(sh2_Hal_t *self, uint8_t *buffer, unsigned len){
+    (void)self;
+    if ((buffer == NULL) || (len < SHTP_HEADER_LEN) ||
+        (len > SH2_HAL_MAX_TRANSFER_OUT)) {
+        return SH2_ERR_BAD_PARAM;
+    }
+
+    uint8_t simultaneous_rx[SH2_HAL_MAX_TRANSFER_OUT] = {0};
+
+    // PS0 becomes active-low WAKE after startup.  The sensor responds by
+    // asserting active-low INT when it is ready for the host transaction.
+    gpio_set_level(IMU_WAKE_GPIO, 0);
+    if (!wait_for_int_low(READY_TIMEOUT_MS)) {
+        gpio_set_level(IMU_WAKE_GPIO, 1);
+        ESP_LOGE(TAG, "timeout waiting for INT before %u-byte write", len);
+        return SH2_ERR_TIMEOUT;
+    }
+
+    s_hal.pending_timestamp_us = (uint32_t)esp_timer_get_time();
+    gpio_set_level(IMU_CS_GPIO, 0);
+    gpio_set_level(IMU_WAKE_GPIO, 1);
+    esp_err_t err = spi_exchange(buffer, simultaneous_rx, len);
+    gpio_set_level(IMU_CS_GPIO, 1);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "SPI write failed: %s", esp_err_to_name(err));
+        return SH2_ERR_IO;
+    }
+
+    // SPI is full-duplex.  Preserve a complete inbound packet if one arrived
+    // while the host was writing, matching CEVA's reference HAL behaviour.
+    size_t rx_len = ((size_t)simultaneous_rx[0] |
+                     ((size_t)simultaneous_rx[1] << 8)) & 0x7FFF;
+    if ((rx_len > SHTP_HEADER_LEN) && (rx_len <= len) &&
+        (rx_len <= sizeof(s_hal.pending_rx))) {
+        memcpy(s_hal.pending_rx, simultaneous_rx, rx_len);
+        s_hal.pending_rx_len = rx_len;
+    }
+
+    return (int)len;
+}
+
+static uint32_t hal_get_time_us(sh2_Hal_t *self){
+    (void)self;
+    return (uint32_t)esp_timer_get_time();
+}
+
+static sh2_Hal_t *make_hal(void){
+    memset(&s_hal, 0, sizeof(s_hal));
+    s_hal.hal.open = hal_open;
+    s_hal.hal.close = hal_close;
+    s_hal.hal.read = hal_read;
+    s_hal.hal.write = hal_write;
+    s_hal.hal.getTimeUs = hal_get_time_us;
+    return &s_hal.hal;
+}
+
+
+void app_main(void){
     //ESP_LOGI(TAG, "bringup skeleton up");
 
     ledc_common_init();
