@@ -50,7 +50,7 @@ static const char *TAG = "bringup";
 #define PCNT_LOW_LIMIT (-3000) // min till counter reset to 0
 #define GLITCH_NS 1000  // <N nanosecs then ignore encoder reading
 #define COUNTS_PER_REV 1976.0f // measured ourselves
-#define SAMPLE_MS 20 // (1/hz) latency of measurements
+#define SAMPLE_MS 10 // (1/hz) latency of measurements
 
 // imu
 #define IMU_SPI_HOST       SPI3_HOST
@@ -496,6 +496,117 @@ static sh2_Hal_t *make_hal(void){
 }
 
 
+static void async_event_handler(void *cookie, sh2_AsyncEvent_t *event)
+{
+    (void)cookie;
+    if (event->eventId == SH2_RESET) {
+        s_runtime_reset = true;
+        ESP_LOGW(TAG, "sensor-hub reset event received");
+    } else if (event->eventId == SH2_SHTP_EVENT) {
+        ESP_LOGW(TAG, "SHTP transport event: %d", event->shtpEvent);
+    }
+}
+
+// disable something??
+static void sensor_event_handler(void *cookie, sh2_SensorEvent_t *event)
+{
+    (void)cookie;
+    sh2_SensorValue_t value;
+    if (sh2_decodeSensorEvent(&value, event) != SH2_OK) {
+        return;
+    }
+
+    switch (value.sensorId) {
+    case SH2_GAME_ROTATION_VECTOR:
+        s_latest.real = value.un.gameRotationVector.real;
+        s_latest.i = value.un.gameRotationVector.i;
+        s_latest.j = value.un.gameRotationVector.j;
+        s_latest.k = value.un.gameRotationVector.k;
+        s_latest.accuracy = value.status;
+        s_latest.have_quaternion = true;
+        s_latest.sample_count++;
+        break;
+    case SH2_ACCELEROMETER:
+        s_latest.ax = value.un.accelerometer.x;
+        s_latest.ay = value.un.accelerometer.y;
+        s_latest.az = value.un.accelerometer.z;
+        s_latest.have_accel = true;
+        break;
+    case SH2_GYROSCOPE_CALIBRATED:
+        s_latest.gx = value.un.gyroscope.x;
+        s_latest.gy = value.un.gyroscope.y;
+        s_latest.gz = value.un.gyroscope.z;
+        s_latest.have_gyro = true;
+        break;
+    default:
+        break;
+    }
+}
+
+
+static int enable_report(sh2_SensorId_t sensor_id, const char *name)
+{
+    sh2_SensorConfig_t config = {0};
+    config.reportInterval_us = REPORT_INTERVAL_US;
+    int rc = sh2_setSensorConfig(sensor_id, &config);
+    if (rc == SH2_OK) {
+        ESP_LOGI(TAG, "enabled %s at %d Hz", name,
+                 1000000 / REPORT_INTERVAL_US);
+    } else {
+        ESP_LOGE(TAG, "failed to enable %s: SH2 error %d", name, rc);
+    }
+    return rc;
+}
+
+static bool enable_test_reports(void)
+{
+    bool ok = true;
+    ok &= enable_report(SH2_GAME_ROTATION_VECTOR, "game rotation vector") == SH2_OK;
+    ok &= enable_report(SH2_ACCELEROMETER, "calibrated accelerometer") == SH2_OK;
+    ok &= enable_report(SH2_GYROSCOPE_CALIBRATED, "calibrated gyroscope") == SH2_OK;
+    return ok;
+}
+
+static void log_product_ids(void)
+{
+    sh2_ProductIds_t ids = {0};
+    int rc = sh2_getProdIds(&ids);
+    if ((rc != SH2_OK) || (ids.numEntries == 0)) {
+        ESP_LOGE(TAG, "product-ID request failed: SH2 error %d", rc);
+        ESP_LOGE(TAG, "SPI did not complete a valid SH-2 exchange");
+        for (;;) {
+            ESP_LOGE(TAG, "levels: INT=%d RST=%d PS0/WAKE=%d; check SDA=MISO and AD0=MOSI",
+                     gpio_get_level(IMU_INT_GPIO), gpio_get_level(IMU_RST_GPIO),
+                     gpio_get_level(IMU_WAKE_GPIO));
+            vTaskDelay(pdMS_TO_TICKS(2000));
+        }
+    }
+
+    for (int n = 0; n < ids.numEntries; ++n) {
+        const sh2_ProductId_t *id = &ids.entry[n];
+        ESP_LOGI(TAG,
+                 "PRODUCT OK [%d]: SW %u.%u.%u, part 0x%08lx, build %lu, reset cause %u",
+                 n, id->swVersionMajor, id->swVersionMinor, id->swVersionPatch,
+                 (unsigned long)id->swPartNumber,
+                 (unsigned long)id->swBuildNumber, id->resetCause);
+    }
+}
+
+static void quaternion_to_euler(float r, float i, float j, float k,
+                                float *yaw, float *pitch, float *roll)
+{
+    *yaw = atan2f(2.0f * i * j - 2.0f * r * k,
+                  2.0f * r * r + 2.0f * j * j - 1.0f);
+
+    float pitch_arg = 2.0f * j * k + 2.0f * r * i;
+    pitch_arg = fmaxf(-1.0f, fminf(1.0f, pitch_arg));
+    *pitch = asinf(pitch_arg);
+
+    *roll = atan2f(-2.0f * i * k + 2.0f * r * j,
+                   2.0f * r * r + 2.0f * k * k - 1.0f);
+}
+
+
 void app_main(void){
     //ESP_LOGI(TAG, "bringup skeleton up");
 
@@ -506,20 +617,49 @@ void app_main(void){
     encoder_init(&enc_l, ENC_L_A_GPIO, ENC_L_B_GPIO);
     encoder_init(&enc_r, ENC_R_A_GPIO, ENC_R_B_GPIO);
 
+    sh2_Hal_t *hal = make_hal();
+    int rc = sh2_open(hal, async_event_handler, NULL);
+
+    // no point continuing
+    if (rc != SH2_OK){
+        ESP_LOGE(TAG, "sh2_open failed: %d", rc);
+        for (;;) { vTaskDelay(pdMS_TO_TICKS(1000));}
+    }
+
+    sh2_setSensorCallback(sensor_event_handler, NULL);
+    log_product_ids();
+
+    s_runtime_reset = false;
+    if (!enable_test_reports()){
+        ESP_LOGE(TAG, "one or more reports could not be enabled");
+    }
+
+    TickType_t last_wake = xTaskGetTickCount(); //?
+    const TickType_t period = pdMS_TO_TICKS(SAMPLE_MS); //?
+
     int64_t last_pos_l = read_position(&enc_l);
     int64_t last_pos_r = read_position(&enc_r);
 
     int tick = 0;
     while (1) {
-        vTaskDelay(pdMS_TO_TICKS(SAMPLE_MS)); // 20ms for now
+        //vTaskDelay(pdMS_TO_TICKS(SAMPLE_MS)); 
+        vTaskDelayUntil(&last_wake, period); // difference??
 
-        // MOTOR
-        // 20ms * 50 = every 1s switch mode
-        int phase = (tick / 50) % 4; // forward, stop, backward, stop
-        int drive = (phase==0) ? COMMAND : (phase==2) ? -COMMAND : 0;
-        motor_drive(&mot_l, drive);
-        motor_drive(&mot_r, drive);
-        tick++;
+        // IMU
+        // drain imu so s_latest holds newest - cos queue not stack internally?
+        int guard = 0;
+        while (gpio_get_level(IMU_INT_GPIO) == 0 && guard++ < 16){ // explain??
+            sh2_service();
+        }
+        if (s_runtime_reset){
+            s_runtime_reset = false;
+            enable_test_reports();
+        }
+
+        float yaw, pitch, roll;
+        quaternion_to_euler(s_latest.real, s_latest.i, s_latest.j, s_latest.k, &yaw, &pitch, &roll); // takes pointer , not pass by ref??
+        float pitch_deg = pitch * RAD_TO_DEG;
+        float pitch_rate = s_latest.gy; 
 
 
         // ENCODER
@@ -537,6 +677,21 @@ void app_main(void){
         last_pos_l = pos_l;
         last_pos_r = pos_r;
 
-        ESP_LOGI(TAG, "L pos=%lld rad/s=%.2f | R pos=%lld rad/s=%.2f", (long long)pos_l, rads_l, (long long)pos_r, rads_r);
+
+        // MOTOR
+        // 10ms * 100 = every 1s switch mode
+        int phase = (tick / 100) % 4; // forward, stop, backward, stop
+        int drive = (phase==0) ? COMMAND : (phase==2) ? -COMMAND : 0;
+        motor_drive(&mot_l, drive);
+        motor_drive(&mot_r, drive);
+        
+
+        if (tick % 20 == 0){
+            //ESP_LOGI(TAG, "L pos=%lld rad/s=%.2f | R pos=%lld rad/s=%.2f", (long long)pos_l, rads_l, (long long)pos_r, rads_r);
+            ESP_LOGI(TAG, "pitch=%6.2f deg  rate=%6.2f", pitch_deg, pitch_rate);
+        }
+
+        tick++;
+        
     }
 }
