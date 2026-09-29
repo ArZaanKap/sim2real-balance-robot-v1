@@ -1,14 +1,11 @@
 #include "motor.h"
+#include "esp_log.h"
+
+#define PWM_FREQ_HZ 20000                        
+#define PWM_RES  LEDC_TIMER_8_BIT     // 8-bit -> duty range 0..255 (same as Arduino)
 
 
-// MOTOR
-typedef struct{
-    ledc_channel_t in1_ch, in2_ch;
-} motor_t;
-
-static motor_t mot_l = {LEDC_CHANNEL_0, LEDC_CHANNEL_1};
-static motor_t mot_r = {LEDC_CHANNEL_2, LEDC_CHANNEL_3};
-
+static const char *TAG = "motor";
 
 
 // ----------- MOTOR FUNCTIONS --------------- // 

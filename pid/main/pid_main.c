@@ -18,9 +18,9 @@
 // compare with standalone files - make modular next
 static const char *TAG = "bringup";
 
-
-#define SAMPLE_MS 10 // (1/hz) latency of measurements
-
+#define CONTROL_HZ 100
+#define SAMPLE_MS (1000.0f / CONTROL_HZ) // (1/hz) latency of measurements
+#define dt (1.0f / CONTROL_HZ)
 
 
 void app_main(void){
@@ -62,8 +62,8 @@ void app_main(void){
 
     int tick = 0;
     while (1) {
-        //vTaskDelay(pdMS_TO_TICKS(SAMPLE_MS)); 
-        vTaskDelayUntil(&last_wake, period); // difference??
+         
+        vTaskDelayUntil(&last_wake, period); 
 
         // IMU
         // drain imu so s_latest holds newest - cos queue not stack internally?
@@ -78,7 +78,7 @@ void app_main(void){
 
         float theta_x, theta_y, theta_z;
         quaternion_to_euler(s_latest.real, s_latest.i, s_latest.j, s_latest.k, &theta_x, &theta_y, &theta_z); // takes pointer , not pass by ref??
-        float theta_y_deg = pitch * RAD_TO_DEG;
+        //float theta_y_deg = theta_y * RAD_TO_DEG;
         float w_y = s_latest.gy; 
 
 
@@ -98,12 +98,10 @@ void app_main(void){
         last_pos_r = pos_r;
 
 
-        // MOTOR
-        
-        
-        int u = pid_controller();
-        motor_drive(&mot_l, drive);
-        motor_drive(&mot_r, drive);
+        // MOTOR        
+        float u = pid_controller(theta_y, w_y, dt);
+        motor_drive(&mot_l, u);
+        motor_drive(&mot_r, u);
         
 
         if (tick % 20 == 0){
@@ -112,8 +110,8 @@ void app_main(void){
             // TEMP debug — identify pitch axis + sign, then delete these two lines
             ESP_LOGI(TAG, "  gyro  gx=%6.2f gy=%6.2f gz=%6.2f", 
                 s_latest.gx * RAD_TO_DEG, s_latest.gy * RAD_TO_DEG, s_latest.gz * RAD_TO_DEG);
-            ESP_LOGI(TAG, "  roll=%6.2f pitch=%6.2f yaw=%6.2f",
-                     roll * RAD_TO_DEG, pitch * RAD_TO_DEG, yaw * RAD_TO_DEG);
+            ESP_LOGI(TAG, "  theta_x=%6.2f theta_y=%6.2f theta_z=%6.2f",
+                     theta_x * RAD_TO_DEG, theta_y * RAD_TO_DEG, theta_z * RAD_TO_DEG);
         }
 
         tick++;

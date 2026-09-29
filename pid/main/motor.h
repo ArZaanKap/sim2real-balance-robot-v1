@@ -1,4 +1,5 @@
 #pragma once
+#include "driver/ledc.h"
 
 
 // motor
@@ -7,8 +8,11 @@
 #define MOT_R_IN1_GPIO 25
 #define MOT_R_IN2_GPIO 26
 
-#define PWM_FREQ_HZ 20000                        
-#define PWM_RES  LEDC_TIMER_8_BIT     // 8-bit -> duty range 0..255 (same as Arduino)
+
+
+typedef struct{
+    ledc_channel_t in1_ch, in2_ch;
+} motor_t;
 
 
 void ledc_common_init(void);

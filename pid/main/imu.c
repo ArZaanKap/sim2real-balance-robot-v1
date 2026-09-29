@@ -1,47 +1,27 @@
 #include "imu.h"
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"     // vTaskDeelay 
+
+#include "esp_timer.h"         // esp_timer_get_time
+#include "esp_log.h"           // ESP_LOGI/E/W
+#include "esp_attr.h"          // DMA_ATTR
 
 
-// IMU 
-typedef struct {
-    sh2_Hal_t hal;
-    spi_device_handle_t spi;
-    bool bus_initialized;
-    bool device_added;
-    uint8_t pending_rx[SH2_HAL_MAX_TRANSFER_OUT];
-    size_t pending_rx_len;
-    uint32_t pending_timestamp_us;
-} esp32_sh2_hal_t;
+static const char *TAG = "imu";
+
+latest_data_t s_latest; // why here and in .h?
+bool s_runtime_reset;
 
 static esp32_sh2_hal_t s_hal;
 // DMA reads directly from this buffer during long inbound SHTP packets, so it
 // must live in internal DMA-capable RAM rather than flash-backed const data.
 static DMA_ATTR uint8_t s_tx_zeroes[SH2_HAL_MAX_TRANSFER_IN] = {0};
 
-typedef struct {
-    bool have_quaternion;
-    bool have_accel;
-    bool have_gyro;
-    uint8_t accuracy;
-    uint32_t sample_count;
-    float real;
-    float i;
-    float j;
-    float k;
-    float ax;
-    float ay;
-    float az;
-    float gx;
-    float gy;
-    float gz;
-} latest_data_t;
-
-static latest_data_t s_latest;
-static bool s_runtime_reset;
 
 
 // ----- IMU FUNCTIONS -------- //
-bool wait_for_int_low(uint32_t timeout_ms)
+static bool wait_for_int_low(uint32_t timeout_ms)
 {
     int64_t deadline_us = esp_timer_get_time() + ((int64_t)timeout_ms * 1000);
     while (gpio_get_level(IMU_INT_GPIO) != 0) {
@@ -53,7 +33,7 @@ bool wait_for_int_low(uint32_t timeout_ms)
     return true;
 }
 
-esp_err_t spi_exchange(const void *tx, void *rx, size_t len)
+static esp_err_t spi_exchange(const void *tx, void *rx, size_t len)
 {
     spi_transaction_t transaction = {
         .length = len * 8,
@@ -63,7 +43,7 @@ esp_err_t spi_exchange(const void *tx, void *rx, size_t len)
     return spi_device_polling_transmit(s_hal.spi, &transaction);
 }
 
-int hal_open(sh2_Hal_t *self){
+static int hal_open(sh2_Hal_t *self){
     (void)self;
 
     // Assert reset before setting the SPI-mode strap.  The module may have
@@ -144,7 +124,7 @@ int hal_open(sh2_Hal_t *self){
     return SH2_OK;
 }
 
-void hal_close(sh2_Hal_t *self){
+static void hal_close(sh2_Hal_t *self){
     (void)self;
     gpio_set_level(IMU_RST_GPIO, 0);
     gpio_set_level(IMU_CS_GPIO, 1);
@@ -159,7 +139,7 @@ void hal_close(sh2_Hal_t *self){
     }
 }
 
-int copy_pending_read(uint8_t *buffer, unsigned capacity, uint32_t *timestamp_us){
+static int copy_pending_read(uint8_t *buffer, unsigned capacity, uint32_t *timestamp_us){
     if (s_hal.pending_rx_len == 0) {
         return 0;
     }
@@ -175,7 +155,7 @@ int copy_pending_read(uint8_t *buffer, unsigned capacity, uint32_t *timestamp_us
     return (int)len;
 }
 
-int hal_read(sh2_Hal_t *self, uint8_t *buffer, unsigned capacity,
+static int hal_read(sh2_Hal_t *self, uint8_t *buffer, unsigned capacity,
                     uint32_t *timestamp_us)
 {
     (void)self;
@@ -223,7 +203,7 @@ int hal_read(sh2_Hal_t *self, uint8_t *buffer, unsigned capacity,
     return (int)packet_len;
 }
 
-int hal_write(sh2_Hal_t *self, uint8_t *buffer, unsigned len){
+static int hal_write(sh2_Hal_t *self, uint8_t *buffer, unsigned len){
     (void)self;
     if ((buffer == NULL) || (len < SHTP_HEADER_LEN) ||
         (len > SH2_HAL_MAX_TRANSFER_OUT)) {
@@ -264,7 +244,7 @@ int hal_write(sh2_Hal_t *self, uint8_t *buffer, unsigned len){
     return (int)len;
 }
 
-uint32_t hal_get_time_us(sh2_Hal_t *self){
+static uint32_t hal_get_time_us(sh2_Hal_t *self){
     (void)self;
     return (uint32_t)esp_timer_get_time();
 }
@@ -328,7 +308,7 @@ void sensor_event_handler(void *cookie, sh2_SensorEvent_t *event)
 }
 
 
-int enable_report(sh2_SensorId_t sensor_id, const char *name)
+static int enable_report(sh2_SensorId_t sensor_id, const char *name)
 {
     sh2_SensorConfig_t config = {0};
     config.reportInterval_us = REPORT_INTERVAL_US;
@@ -379,14 +359,14 @@ void log_product_ids(void)
 void quaternion_to_euler(float r, float i, float j, float k,
                                 float *theta_x, float *theta_y, float *theta_z)
 {
-    *yaw = atan2f(2.0f * i * j - 2.0f * r * k,
+    *theta_z = atan2f(2.0f * i * j - 2.0f * r * k,
                   2.0f * r * r + 2.0f * j * j - 1.0f);
 
-    float pitch_arg = 2.0f * j * k + 2.0f * r * i;
-    pitch_arg = fmaxf(-1.0f, fminf(1.0f, pitch_arg));
-    *pitch = asinf(pitch_arg);
+    float theta_y_arg = 2.0f * j * k + 2.0f * r * i;
+    theta_y_arg = fmaxf(-1.0f, fminf(1.0f, theta_y_arg));
+    *theta_y = asinf(theta_y_arg);
 
-    *roll = atan2f(-2.0f * i * k + 2.0f * r * j,
+    *theta_x = atan2f(-2.0f * i * k + 2.0f * r * j,
                    2.0f * r * r + 2.0f * k * k - 1.0f);
 }
 
