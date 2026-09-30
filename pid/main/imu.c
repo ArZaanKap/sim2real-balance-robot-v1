@@ -362,11 +362,11 @@ void quaternion_to_euler(float r, float i, float j, float k,
     *theta_z = atan2f(2.0f * i * j - 2.0f * r * k,
                   2.0f * r * r + 2.0f * j * j - 1.0f);
 
-    float theta_y_arg = 2.0f * j * k + 2.0f * r * i;
-    theta_y_arg = fmaxf(-1.0f, fminf(1.0f, theta_y_arg));
-    *theta_y = asinf(theta_y_arg);
+    float theta_x_arg = 2.0f * j * k + 2.0f * r * i;
+    theta_x_arg = fmaxf(-1.0f, fminf(1.0f, theta_x_arg));
+    *theta_x = asinf(theta_x_arg);
 
-    *theta_x = atan2f(-2.0f * i * k + 2.0f * r * j,
+    *theta_y = atan2f(-2.0f * i * k + 2.0f * r * j,
                    2.0f * r * r + 2.0f * k * k - 1.0f);
 }
 

@@ -1,9 +1,11 @@
 #include "motor.h"
 #include "encoder.h"
 #include "imu.h"
+#include "pid.h"
 
 
 #include <stdio.h>
+#include <math.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -60,6 +62,9 @@ void app_main(void){
     int64_t last_pos_l = read_position(&enc_l);
     int64_t last_pos_r = read_position(&enc_r);
 
+    static pid_ctrl_t balance_pid; // here static gives: zero init, var lives in fixed mem
+    pid_init(&balance_pid, 2550.0f, 0.0f, 0.0f, 0.0f, 255.0f, dt); // struct, kp, ki, kd, target, out max, dt
+
     int tick = 0;
     while (1) {
          
@@ -78,7 +83,7 @@ void app_main(void){
 
         float theta_x, theta_y, theta_z;
         quaternion_to_euler(s_latest.real, s_latest.i, s_latest.j, s_latest.k, &theta_x, &theta_y, &theta_z); // takes pointer , not pass by ref??
-        //float theta_y_deg = theta_y * RAD_TO_DEG;
+        float theta_y_deg = theta_y * RAD_TO_DEG;
         float w_y = s_latest.gy; 
 
 
@@ -97,12 +102,18 @@ void app_main(void){
         last_pos_l = pos_l;
         last_pos_r = pos_r;
 
+        // CONTROL
+        if (fabsf(theta_y_deg) > 40.0f){
+            motor_drive(&mot_l, 0);
+            motor_drive(&mot_r, 0);
+            pid_reset(&balance_pid);
+        }
 
-        // MOTOR        
-        float u = pid_controller(theta_y, w_y, dt);
-        motor_drive(&mot_l, u);
-        motor_drive(&mot_r, u);
-        
+        else{
+            float u = pid_controller(&balance_pid, theta_y, w_y);
+            motor_drive(&mot_l, (int)u);
+            motor_drive(&mot_r, (int)u);
+        }        
 
         if (tick % 20 == 0){
             //ESP_LOGI(TAG, "L pos=%lld rad/s=%.2f | R pos=%lld rad/s=%.2f", (long long)pos_l, rads_l, (long long)pos_r, rads_r);
