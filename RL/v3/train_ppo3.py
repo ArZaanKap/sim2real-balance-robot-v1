@@ -8,8 +8,8 @@ import os
 from balance_env2 import BalanceEnv
 
 # ---- change per run (one place) ----
-RUN = 4
-MODEL_PATH = "../models/model1.xml"
+RUN = 1
+MODEL_PATH = "../models/model2.xml"
 SAVE_DIR = "trained_policies2"
 # ------------------------------------
 

@@ -1,1 +1,1 @@
-# adding encoder quant for vel, grounding noise terms with data from sensors, new neck in xml
+# BASED OFF V1: adding encoder quant for vel, grounding noise terms with data from sensors, new neck in xml

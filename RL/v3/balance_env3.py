@@ -4,6 +4,7 @@ import mujoco
 from gymnasium.spaces import Box
 
 # 1 rad ~= 57deg
+CPR = 1976  # counts per rev
 
 class BalanceEnv(gym.Env):
 
@@ -31,18 +32,7 @@ class BalanceEnv(gym.Env):
         self.len_obs_hist = 3
 
         self.state_len = 4 # s_t = [pitch, pitch_rate, wl_w, wr_w]
-        self.num_actions = 1 #2
-
-        # OBS normalization (x - mu) / std
-        # mu=0 since all symmetric, make std for all ~= 1.0 (VALUES FROM V1)
-        state_stds = np.array([0.15, 0.5, 5.0, 5.0], dtype=np.float32)
-        action_stds = np.array([1.0], dtype=np.float32)
-
-        self.OBS_stds = np.concatenate([
-            state_stds,
-            np.tile(action_stds, self.len_action_hist),
-            np.tile(state_stds, self.len_obs_hist),
-        ]).astype(np.float32)
+        self.num_actions = 1 #2     # action space size (out_size of policy)
 
         # 2 floats [-1,1] (left, right)
         self.action_space = Box(-1.0, 1.0, shape=(self.num_actions,), dtype=np.float32)
@@ -64,12 +54,6 @@ class BalanceEnv(gym.Env):
         self.fall_angle = 0.6   # rad - TERMINAL
 
         self.prev_action = None
-
-
-    def _normalize(self, full_obs):
-        # clip for safety
-        # mu=0   (x-mu)/std
-        return np.clip(full_obs / self.OBS_stds, -10.0, 10.0).astype(np.float32)
 
 
     def reset(self, seed=None, options=None):
@@ -110,8 +94,8 @@ class BalanceEnv(gym.Env):
 
         # buffers for latency DR (action & obs MAYBE)
         # action_buf stores raw actions
-        self.action_buf = np.zeros(self.num_actions * self.np_random.integers(1,4)) # random action delay in control steps() -> so 10ms - 40ms
-        
+        delay = self.np_random.integers(0,3) # random action delay in control steps() -> each 10ms 
+        self.action_buf = np.zeros(self.num_actions * (delay+1)) # NEW - buf now stores cur steps action too -> if N=2, buf = [a_t, a_t-1, a_t-2]
 
         # INIT STATE DR - should add noise here too? else 1st clean?
         pitch0 = self.np_random.uniform(-0.10, 0.10) # rad
@@ -130,7 +114,7 @@ class BalanceEnv(gym.Env):
 
         # has to match step()?
         full_obs = np.array([*self._get_obs(), *self.action_hist, *self.obs_hist], dtype=np.float32)
-        return self._normalize(full_obs), {}
+        return full_obs, {}
     
     # helper to get pitch
     def get_pitch(self):
@@ -145,15 +129,16 @@ class BalanceEnv(gym.Env):
         pitch = self.get_pitch() + self.np_random.uniform(-0.04, 0.04)
         pitch_rate = self.data.sensor("imu_gyro").data[1] + self.np_random.uniform(-0.05, 0.05)  # (wx, wy, wz) -> gyros give angular velocity in each axis
         
-        # read gt wheel vel with noise (not available on robot - differentiate encoder readings then filter instead)
-        wl = self.data.sensor("wheel_left_vel").data[0] + self.np_random.uniform(-0.05, 0.05)  # (angular vel) [0] cos length 1 vector
-        wr = self.data.sensor("wheel_right_vel").data[0] + self.np_random.uniform(-0.05, 0.05)
+        wl = 
+        #wl = self.data.sensor("wheel_left_vel").data[0] + self.np_random.uniform(-0.05, 0.05)  # (angular vel) [0] cos length 1 vector
+        #wr = self.data.sensor("wheel_right_vel").data[0] + self.np_random.uniform(-0.05, 0.05)
 
         return np.array([pitch, pitch_rate, wl, wr], dtype=np.float32) # return core obs (without histories)
 
 
     def step(self, action):
-
+        # if N=2 for action_buf
+        # buf = [()]
         # get action to use out of buf first - (front most recent)
         delayed_action = self.action_buf[-self.num_actions:] # last action in buf
 
