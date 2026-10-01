@@ -48,6 +48,7 @@ class BalanceEnv(gym.Env):
         self.obs_hist = np.zeros(self.state_len * self.len_obs_hist) # store prev N observations
 
         self.physics_substeps = 5 # 500hz physics vs 100hz control
+        self.control_dt = self.physics_substeps * self.model.opt.timestep # default timestep is 1/500? read from xml
         self.step_count = 0
         self.max_steps = 2000
 
@@ -67,6 +68,10 @@ class BalanceEnv(gym.Env):
 
         # reset pre action cos new episode starts
         self.prev_action = None
+
+        # reset enc phase - units counts?
+        self.enc_phase = self.np_random.uniform(0.0, 1.0, size=2) # [left, right] pos between ticks at start time
+
 
         # mass/inertia DR
         for i in range(1,self.model.nbody): # skip body 0 (world - has no mass)
@@ -112,24 +117,36 @@ class BalanceEnv(gym.Env):
         mujoco.mj_forward(self.model, self.data)
         self.step_count = 0
 
+        self.prev_counts = self._read_counts() # init
+
         # has to match step()?
         full_obs = np.array([*self._get_obs(), *self.action_hist, *self.obs_hist], dtype=np.float32)
         return full_obs, {}
     
     # helper to get pitch
-    def get_pitch(self):
+    def _get_pitch(self):
         quat = self.data.sensor("imu_quat").data    # rot stored as quarternion - must extract theta
         R = np.zeros(9)
         mujoco.mju_quat2Mat(R, quat)
         R = R.reshape(3,3)
         return np.arctan2(R[0,2], R[2,2])  # x = atan2(sin(x)/cos(x)) -> 3d y rot matrix
 
+    # helper
+    def _read_counts(self):
+        # count units = theta/2pi * CPR
+        theta = np.array([self.data.sensors("wheel_left_pos").data[0], self.data.sensors("wheel_right_pos").data[0]])
+        return np.floor(theta / (2*np.pi) * CPR + self.enc_phase) # enc phase: random start for count [0,1]
+
+    # helper
     def _get_obs(self):
         
-        pitch = self.get_pitch() + self.np_random.uniform(-0.04, 0.04)
-        pitch_rate = self.data.sensor("imu_gyro").data[1] + self.np_random.uniform(-0.05, 0.05)  # (wx, wy, wz) -> gyros give angular velocity in each axis
+        pitch = self._get_pitch() + self.np_random.uniform(-0.04, 0.04)
+        pitch_rate = self.data.sensors("imu_gyro").data[1] + self.np_random.uniform(-0.05, 0.05)  # (wx, wy, wz) -> gyros give angular velocity in each axis
         
-        wl = 
+        counts = self._read_counts()
+        wl, wr = (counts - self.prev_counts) * (2 * np.pi / CPR) / self.control_dt # counts -> rad -> rad/s
+        self.prev_counts = counts 
+
         #wl = self.data.sensor("wheel_left_vel").data[0] + self.np_random.uniform(-0.05, 0.05)  # (angular vel) [0] cos length 1 vector
         #wr = self.data.sensor("wheel_right_vel").data[0] + self.np_random.uniform(-0.05, 0.05)
 
@@ -137,14 +154,13 @@ class BalanceEnv(gym.Env):
 
 
     def step(self, action):
-        # if N=2 for action_buf
-        # buf = [()]
-        # get action to use out of buf first - (front most recent)
-        delayed_action = self.action_buf[-self.num_actions:] # last action in buf
-
+        
         # store latest action in the buffer - to be used N steps later
-        self.action_buf = np.roll(self.action_buf, self.num_actions)
+        self.action_buf = np.roll(self.action_buf, self.num_actions) # pop action from back - roll by num actions since all stored as continuous array
         self.action_buf[0:self.num_actions] = action
+
+        # CHANGED - get action to use out of buf AFTER - (front most recent)
+        delayed_action = self.action_buf[-self.num_actions:] # last action in buf
 
         
         # torque = policy output clip to [-1, 1] - ACTUATOR DOES SCALING NOW
@@ -169,7 +185,7 @@ class BalanceEnv(gym.Env):
         # ---- REWARDS ---- #
         # use GT vals from sim - not noisy vals from obs
 
-        gt_pitch = self.get_pitch()
+        gt_pitch = self._get_pitch()
 
         # quadratic -> could test exp(-k*pitch^2)
         upright = 1.0 - (gt_pitch/self.fall_angle)**2
@@ -186,4 +202,4 @@ class BalanceEnv(gym.Env):
         terminated = bool(abs(gt_pitch) > self.fall_angle)
         truncated = bool(self.step_count >= self.max_steps)
 
-        return self._normalize(full_obs), float(reward), terminated, truncated, {}
+        return full_obs, float(reward), terminated, truncated, {}
