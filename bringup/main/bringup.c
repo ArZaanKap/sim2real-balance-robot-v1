@@ -687,8 +687,9 @@ void app_main(void){
         
 
         if (tick % 20 == 0){
-            //ESP_LOGI(TAG, "L pos=%lld rad/s=%.2f | R pos=%lld rad/s=%.2f", (long long)pos_l, rads_l, (long long)pos_r, rads_r);
+            ESP_LOGI(TAG, "L pos=%lld rad/s=%.2f | R pos=%lld rad/s=%.2f", (long long)pos_l, rads_l, (long long)pos_r, rads_r);
             //ESP_LOGI(TAG, "pitch=%6.2f deg  rate=%6.2f", pitch_deg, pitch_rate);
+            
             // TEMP debug — identify pitch axis + sign, then delete these two lines
             ESP_LOGI(TAG, "  gyro  gx=%6.2f gy=%6.2f gz=%6.2f", 
                 s_latest.gx * RAD_TO_DEG, s_latest.gy * RAD_TO_DEG, s_latest.gz * RAD_TO_DEG);

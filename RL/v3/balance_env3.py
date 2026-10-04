@@ -134,14 +134,14 @@ class BalanceEnv(gym.Env):
     # helper
     def _read_counts(self):
         # count units = theta/2pi * CPR
-        theta = np.array([self.data.sensors("wheel_left_pos").data[0], self.data.sensors("wheel_right_pos").data[0]])
+        theta = np.array([self.data.sensor("wheel_left_pos").data[0], self.data.sensor("wheel_right_pos").data[0]])
         return np.floor(theta / (2*np.pi) * CPR + self.enc_phase) # enc phase: random start for count [0,1]
 
     # helper
     def _get_obs(self):
         
         pitch = self._get_pitch() + self.np_random.uniform(-0.04, 0.04)
-        pitch_rate = self.data.sensors("imu_gyro").data[1] + self.np_random.uniform(-0.05, 0.05)  # (wx, wy, wz) -> gyros give angular velocity in each axis
+        pitch_rate = self.data.sensor("imu_gyro").data[1] + self.np_random.uniform(-0.05, 0.05)  # (wx, wy, wz) -> gyros give angular velocity in each axis
         
         counts = self._read_counts()
         wl, wr = (counts - self.prev_counts) * (2 * np.pi / CPR) / self.control_dt # counts -> rad -> rad/s

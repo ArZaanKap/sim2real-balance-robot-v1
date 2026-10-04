@@ -18,7 +18,7 @@
 
 
 // compare with standalone files - make modular next
-static const char *TAG = "bringup";
+static const char *TAG = "pid_main";
 
 #define CONTROL_HZ 100
 #define SAMPLE_MS (1000.0f / CONTROL_HZ) // (1/hz) latency of measurements

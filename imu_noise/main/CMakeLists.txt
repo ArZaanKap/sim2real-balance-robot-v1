@@ -1,0 +1,13 @@
+idf_component_register(
+    SRCS
+        "imu_noise_main.c"
+        "../../pid/main/imu.c"
+    INCLUDE_DIRS
+        "."
+        "../../pid/main"
+    PRIV_REQUIRES
+        sh2
+        esp_driver_gpio
+        esp_driver_spi
+        esp_timer
+)

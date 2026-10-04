@@ -33,6 +33,8 @@ BAM/fit/params*.json
 /CLAUDE.md
 /AGENTS.md
 /RL/v1/MEMORY.md
+/memory/
+/.claude/settings.local.json
 
 # Note: sdkconfig IS committed on purpose (no sdkconfig.defaults in these projects,
 # so sdkconfig is the only record of target + config). Delete it here to ignore instead.
