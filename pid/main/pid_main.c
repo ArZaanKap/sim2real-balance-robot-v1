@@ -63,7 +63,8 @@ void app_main(void){
     int64_t last_pos_r = read_position(&enc_r);
 
     static pid_ctrl_t balance_pid; // here static gives: zero init, var lives in fixed mem
-    pid_init(&balance_pid, 2550.0f, 0.0f, 0.0f, 0.0f, 255.0f, dt); // struct, kp, ki, kd, target, out max, dt
+    pid_init(&balance_pid, 1000.0f, 0.0f, 0.0f, 0.0f, 255.0f, dt); // struct, kp, ki, kd, target, out max, dt
+    // 2550.0f
 
     int tick = 0;
     while (1) {
@@ -102,6 +103,8 @@ void app_main(void){
         last_pos_l = pos_l;
         last_pos_r = pos_r;
 
+        float u = 0.0f; // control 0-255
+
         // CONTROL
         if (fabsf(theta_y_deg) > 40.0f){
             motor_drive(&mot_l, 0);
@@ -110,8 +113,8 @@ void app_main(void){
         }
 
         else{
-            float u = pid_controller(&balance_pid, theta_y, w_y);
-            motor_drive(&mot_l, (int)u);
+            u = pid_controller(&balance_pid, theta_y, w_y);
+            motor_drive(&mot_l, (int)-u); // neg sign needed for motor left
             motor_drive(&mot_r, (int)u);
         }        
 
@@ -119,10 +122,13 @@ void app_main(void){
             //ESP_LOGI(TAG, "L pos=%lld rad/s=%.2f | R pos=%lld rad/s=%.2f", (long long)pos_l, rads_l, (long long)pos_r, rads_r);
             //ESP_LOGI(TAG, "pitch=%6.2f deg  rate=%6.2f", pitch_deg, pitch_rate);
             // TEMP debug — identify pitch axis + sign, then delete these two lines
-            ESP_LOGI(TAG, "  gyro  gx=%6.2f gy=%6.2f gz=%6.2f", 
-                s_latest.gx * RAD_TO_DEG, s_latest.gy * RAD_TO_DEG, s_latest.gz * RAD_TO_DEG);
-            ESP_LOGI(TAG, "  theta_x=%6.2f theta_y=%6.2f theta_z=%6.2f",
-                     theta_x * RAD_TO_DEG, theta_y * RAD_TO_DEG, theta_z * RAD_TO_DEG);
+            //ESP_LOGI(TAG, "  gyro  gx=%6.2f gy=%6.2f gz=%6.2f", 
+                //s_latest.gx * RAD_TO_DEG, s_latest.gy * RAD_TO_DEG, s_latest.gz * RAD_TO_DEG);
+            //ESP_LOGI(TAG, "  theta_x=%6.2f theta_y=%6.2f theta_z=%6.2f",
+                     //theta_x * RAD_TO_DEG, theta_y * RAD_TO_DEG, theta_z * RAD_TO_DEG);
+        
+            ESP_LOGI(TAG, "theta_y=%6.2f deg  w_y=%6.2f rad/s  u=%7.1f", theta_y_deg, w_y, u);
+
         }
 
         tick++;
