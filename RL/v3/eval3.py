@@ -1,11 +1,11 @@
-"""Deterministic, headless policy evaluation for the v2 balance environment.
+"""Deterministic, headless policy evaluation for the v3 balance environment.
 
-Examples (run from RL/v2):
-    python eval2.py                         # quick check: best run 1, seeds 0..19
-    python eval2.py --episodes 300          # fuller fixed-seed audit
-    python eval2.py --run 1 --final         # evaluate final rather than best
-    python eval2.py --run 1 2 --episodes 300  # compare on identical seeds
-    python eval2.py --seed-start 20000      # use a different fixed seed set
+Examples (run from RL/v3):
+    python eval3.py                         # quick check: best run 1, seeds 0..19
+    python eval3.py --episodes 300          # fuller fixed-seed audit
+    python eval3.py --run 1 --final        # evaluate final rather than best
+    python eval3.py --run 1 2 --episodes 300  # compare on identical seeds
+    python eval3.py --seed-start 20000      # use a different fixed seed set
 """
 
 import argparse
@@ -13,27 +13,37 @@ import os
 
 import numpy as np
 from stable_baselines3 import PPO
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
-from balance_env2 import BalanceEnv
+from balance_env3 import BalanceEnv
 
 
-MODEL_PATH = "../models/model1.xml"
-SAVE_DIR = "trained_policies2"
+MODEL_PATH = "../models/model2.xml"
+SAVE_DIR = "trained_policies3"
+
+# episode length for the audit; must be identical across every policy you compare
+EPISODE_SECONDS = 30.0
+EPISODE_STEPS = int(round(EPISODE_SECONDS / 0.01))  # 100 Hz control -> steps
 
 
 def load_policy(run, use_best, make_env):
     if use_best:
         policy_path = os.path.join(SAVE_DIR, f"best{run}", "best_model")
+        vecnorm_path = os.path.join(SAVE_DIR, f"best{run}", "vecnorm.pkl")
         label = f"best{run}"
     else:
         policy_path = os.path.join(SAVE_DIR, f"ppo_balance{run}")
+        vecnorm_path = os.path.join(SAVE_DIR, f"vecnorm{run}.pkl")
         label = f"final{run}"
 
     model = PPO.load(policy_path, device="cpu")
-    return label, model
+    vecnorm = VecNormalize.load(vecnorm_path, DummyVecEnv([make_env]))
+    vecnorm.training = False
+    vecnorm.norm_reward = False
+    return label, model, vecnorm
 
 
-def run_episode(model, env, seed):
+def run_episode(model, vecnorm, env, seed):
     obs, _ = env.reset(seed=seed)
     start_x = float(env.data.qpos[0])
     max_excursion = 0.0
@@ -49,14 +59,14 @@ def run_episode(model, env, seed):
     steps = 0
 
     while True:
-        # env already emits normalised obs (fixed scales) -> feed straight in
-        action, _ = model.predict(obs, deterministic=True)
+        normalized_obs = vecnorm.normalize_obs(obs)
+        action, _ = model.predict(normalized_obs, deterministic=True)
         action = np.asarray(action, dtype=np.float64).reshape(-1)
 
         obs, _, terminated, truncated, _ = env.step(action)
         steps += 1
 
-        pitch = env.get_pitch()  # ground truth, not the noisy policy observation
+        pitch = env._get_pitch()  # ground truth, not the noisy policy observation
         pitch_sq_sum += float(pitch * pitch)
         action_abs_sum += float(np.abs(action).mean())
         saturation_count += int(np.any(np.abs(action) >= 0.95))
@@ -91,9 +101,10 @@ def run_episode(model, env, seed):
 
 def evaluate(run, use_best, seeds):
     make_env = lambda: BalanceEnv(model_path=MODEL_PATH)
-    label, model = load_policy(run, use_best, make_env)
+    label, model, vecnorm = load_policy(run, use_best, make_env)
     env = make_env()
-    episodes = [run_episode(model, env, seed) for seed in seeds]
+    env.max_steps = EPISODE_STEPS   # override the env default (2000=20s) for this audit
+    episodes = [run_episode(model, vecnorm, env, seed) for seed in seeds]
 
     steps = np.asarray([ep["steps"] for ep in episodes])
     total_steps = int(steps.sum())
@@ -119,6 +130,7 @@ def evaluate(run, use_best, seeds):
         "mean_max_excursion_m": float(np.mean([ep["max_excursion"] for ep in episodes])),
     }
     env.close()
+    vecnorm.close()
     return label, metrics
 
 
@@ -141,7 +153,7 @@ def main():
         print(f"episodes:                  {metrics['episodes']:8d}")
         print(f"mean survival:             {metrics['mean_survival_s']:8.2f} s")
         print(f"median survival:           {metrics['median_survival_s']:8.2f} s")
-        print(f"20-second success:         {metrics['success_pct']:8.1f} %")
+        print(f"{EPISODE_SECONDS:.0f}-second success:         {metrics['success_pct']:8.1f} %")
         print(f"fell within 1 second:      {metrics['fell_under_1s_pct']:8.1f} %")
         print(f"pitch RMS:                 {metrics['pitch_rms_deg']:8.2f} deg")
         print(f"mean |action|:             {metrics['mean_abs_action']:8.3f}")

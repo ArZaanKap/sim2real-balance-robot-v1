@@ -18,6 +18,7 @@ float pid_controller(pid_ctrl_t *p, const float input, const float input_rate){
     float error_rate = -input_rate; // e = t - i  ->  de/dt = -i
     p->integral += error * p->dt;
     
+    // for pos angle, +u needed, therefore k vals should be neg
 
     float u = p->kp * error + p->kd * error_rate + p->ki * p->integral;
     if (u > p->out_max){

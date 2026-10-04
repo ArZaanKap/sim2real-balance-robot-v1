@@ -63,7 +63,7 @@ void app_main(void){
     int64_t last_pos_r = read_position(&enc_r);
 
     static pid_ctrl_t balance_pid; // here static gives: zero init, var lives in fixed mem
-    pid_init(&balance_pid, 1000.0f, 0.0f, 0.0f, 0.0f, 255.0f, dt); // struct, kp, ki, kd, target, out max, dt
+    pid_init(&balance_pid, -1000.0f, -0.0f, -0.0f, 0.0f, 255.0f, dt); // struct, kp, ki, kd, target, out max, dt
     // 2550.0f
 
     int tick = 0;
@@ -90,7 +90,7 @@ void app_main(void){
 
         // ENCODER
         int64_t pos_l = read_position(&enc_l); // encoder counts
-        int64_t pos_r = read_position(&enc_r);
+        int64_t pos_r = -read_position(&enc_r); // negate for right motor again
 
         // difference in encoder counts / COUNTS_PER_REV = revs (in 20ms)
         float revs_l = (float)(pos_l - last_pos_l) / COUNTS_PER_REV; // convert encoder counts -> revolutions
@@ -114,12 +114,12 @@ void app_main(void){
 
         else{
             u = pid_controller(&balance_pid, theta_y, w_y);
-            motor_drive(&mot_l, (int)-u); // neg sign needed for motor left
-            motor_drive(&mot_r, (int)u);
+            motor_drive(&mot_l, (int)u); 
+            motor_drive(&mot_r, (int)-u); // neg sign needed for motor right
         }        
 
-        if (tick % 20 == 0){
-            //ESP_LOGI(TAG, "L pos=%lld rad/s=%.2f | R pos=%lld rad/s=%.2f", (long long)pos_l, rads_l, (long long)pos_r, rads_r);
+        if (tick % 40 == 0){
+            ESP_LOGI(TAG, "L pos=%lld rad/s=%.2f | R pos=%lld rad/s=%.2f", (long long)pos_l, rads_l, (long long)pos_r, rads_r);
             //ESP_LOGI(TAG, "pitch=%6.2f deg  rate=%6.2f", pitch_deg, pitch_rate);
             // TEMP debug — identify pitch axis + sign, then delete these two lines
             //ESP_LOGI(TAG, "  gyro  gx=%6.2f gy=%6.2f gz=%6.2f", 

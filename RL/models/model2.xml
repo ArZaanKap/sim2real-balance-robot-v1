@@ -1,4 +1,4 @@
-<mujoco model="model0">
+<mujoco model="model2">
   <option gravity="0 0 -9.81" integrator="implicitfast"/>
 
   <asset>
@@ -47,7 +47,7 @@
 
       <!-- neck NEW -->
       <body name="neck" pos="0 0 0">
-        <geom type="box" size="0.0315 0.010 0.175" rgba="0.5 0.5 0.5 1" pos="0 0 0.290" mass="0.226"/> 
+        <geom type="box" size="0.0315 0.010 0.175" rgba="0.5 0.5 0.5 1" pos="0 0 0.184" mass="0.226"/> 
       </body>
 
       <!-- battery block-->

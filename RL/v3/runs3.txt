@@ -1,1 +1,2 @@
 # BASED OFF V1: adding encoder quant for vel, grounding noise terms with data from sensors, new neck in xml
+# run1: v3 env (model2 new neck, latency DR {0,1,2}, encoder quantization) + VecNorm + ent_coef 0.005, gamma 0.995, 400k. IMU noise still GUESSED (+-0.04 pitch / +-0.05 gyro) unless grounded first
