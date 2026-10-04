@@ -59,7 +59,7 @@
 
       <!-- electronics block -->
       <body name="electronics_block" pos="0 0 0">
-        <geom type="box" size="0.04 0.03 0.01" rgba="0.5 0.5 0.5 1" pos="0 0.050 0.014" mass="0.120"/> 
+        <geom type="box" size="0.04 0.03 0.01" rgba="0.5 0.5 0.5 1" pos="0 0.050 0.014" mass="0.074"/> 
       </body>
 
       <!-- WHEELS not rigid-->

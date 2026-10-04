@@ -7,14 +7,14 @@ numerically exact before any hardware is involved.
 
 ```
 SB3 predict()  ==  np_forward()  ==  your C forward pass
-  (the truth)     (proven here)    (you prove with fixtures.h)
+  (the truth)     (proven here)    (you prove with policy_fixtures.h)
 ```
 
 - `export_policy.py` reimplements the exact inference path in numpy (`np_forward`) and
   checks it against SB3's own `predict()` on 500 real rollout obs. Agreement is ~2e-7.
   **If it doesn't match, it writes nothing** — a wrong export never produces a header.
-- It then dumps the weights (`policy.h`) and test vectors (`fixtures.h`). Your C forward
-  pass only has to match `np_forward`, and `fixtures.h` lets you check that offline over
+- It then dumps the weights (`policy_weights.h`) and test vectors (`policy_fixtures.h`). Your C forward
+  pass only has to match `np_forward`, and `policy_fixtures.h` lets you check that offline over
   serial. Match to **~1e-4** (float32 rounding differs between numpy and the ESP32 FPU).
 
 ## Run it
@@ -28,13 +28,13 @@ Set `RUN` at the top of the script to pick the policy (`best{RUN}`). Output land
 `export/run{RUN}/` so policies never collide:
 
 ```
-export/run13/policy.h      # DATA ONLY: VecNorm affine + MLP weights
-export/run13/fixtures.h    # 12 (raw_obs -> expected_action) pairs
+export/run13/policy_weights.h      # DATA ONLY: VecNorm affine + MLP weights
+export/run13/policy_fixtures.h    # 12 (raw_obs -> expected_action) pairs
 ```
 
 Current deploy pick: **best13** (jitter 0.280, healthiest — see best-policies memory).
 
-## What the C must implement (it's in policy.h's header comment too)
+## What the C must implement (it's in policy_weights.h's header comment too)
 
 ```
 x = clip((obs - OBS_MEAN)/sqrt(OBS_VAR + POLICY_EPS), -POLICY_CLIP, POLICY_CLIP)
@@ -51,7 +51,7 @@ a = clip(a, -1, 1)             // SB3 clips the action to the Box bounds
 
 ## The live obs contract (for the bench side, NOT needed for the fixture test)
 
-`fixtures.h` obs are pre-baked, so you can test the forward pass with zero sensors. When
+`policy_fixtures.h` obs are pre-baked, so you can test the forward pass with zero sensors. When
 you later assemble the 19-vector from real hardware it must match sim order/units/sign:
 
 ```
@@ -79,5 +79,5 @@ you later assemble the 19-vector from real hardware it must match sim order/unit
 | file | what |
 |---|---|
 | `export_policy.py` | extract + parity check + emit headers |
-| `run{RUN}/policy.h` | weights + norm stats (data only; you write the forward pass) |
-| `run{RUN}/fixtures.h` | offline test vectors for the C |
+| `run{RUN}/policy_weights.h` | weights + norm stats (data only; you write the forward pass) |
+| `run{RUN}/policy_fixtures.h` | offline test vectors for the C |

@@ -120,7 +120,14 @@ class BalanceEnv(gym.Env):
         self.prev_counts = self._read_counts() # init
 
         # has to match step()?
-        full_obs = np.array([*self._get_obs(), *self.action_hist, *self.obs_hist], dtype=np.float32)
+        obs = self._get_obs()
+        full_obs = np.array([obs, *self.action_hist, *self.obs_hist], dtype=np.float32)
+        
+        # MUST be after full_obs - else full obs would have state0 in its obs hist
+        # UPDATE obs hist here once - else first state doesnt get added to obs history
+        self.obs_hist = np.roll(self.obs_hist, self.state_len)
+        self.obs_hist[0:self.state_len] = obs
+        
         return full_obs, {}
     
     # helper to get pitch

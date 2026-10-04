@@ -1,9 +1,9 @@
 """Export a trained v1 PPO balancer to a C header + parity fixtures.
 
 What it emits (into export/run{RUN}/):
-  policy.h   - DATA ONLY: VecNorm affine + MLP weights/biases as float32 arrays.
+  policy_weights.h   - DATA ONLY: VecNorm affine + MLP weights/biases as float32 arrays.
                You write the C forward pass; this just gives it the numbers.
-  fixtures.h - N (raw_obs -> expected_action) pairs from real rollouts, so your
+  policy_fixtures.h - N (raw_obs -> expected_action) pairs from real rollouts, so your
                C can printf its action over serial and diff against ground truth.
 
 It also runs an in-process PARITY CHECK: a from-scratch numpy reimplementation of the exact
@@ -119,7 +119,7 @@ def cmat(name, M):
 
 
 def write_header(d, outdir):
-    path = os.path.join(outdir, "policy.h")
+    path = os.path.join(outdir, "policy_weights.h")
     with open(path, "w") as f:
         f.write(f"// AUTO-GENERATED from best{RUN} by export_policy.py -- DATA ONLY, do not edit.\n")
         f.write(f"// Inference order the C must implement:\n")
@@ -139,7 +139,7 @@ def write_header(d, outdir):
 
 
 def write_fixtures(raws, acts, outdir):
-    path = os.path.join(outdir, "fixtures.h")
+    path = os.path.join(outdir, "policy_fixtures.h")
     idx = np.linspace(0, len(raws) - 1, N_FIXTURES).astype(int)
     with open(path, "w") as f:
         f.write(f"// AUTO-GENERATED test vectors from best{RUN}. Feed each obs to your C forward\n")
